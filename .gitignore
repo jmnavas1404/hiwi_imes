@@ -1,17 +1,8 @@
-# SPDX-FileCopyrightText: 2025 SensorStim Neurotechnology GmbH <support@capture2go.com>
-#
-# SPDX-License-Identifier: MIT
-
-__pycache__/
-*.egg-info/
-.DS_Store
-/dist/
-/docs/_build/
-/examples/*-*-*_*_Recording/
-/examples/*-*-*_*_Recording.zip
-/examples/*_IMU_*.bin
-/examples/*_IMU_*.mat
-/capture_to_go
-conteo_horas.md
 /administrativo
 /imes
+/general
+/session_4
+ki_vorschlag
+not_needed_any_more
+test.py
+conteo_horas.md
