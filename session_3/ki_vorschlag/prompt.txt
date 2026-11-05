@@ -1,0 +1,25 @@
+**Contexto General del Proyecto:**
+Estamos diseñando bloques de programación en JupyterLite para estudiantes principiantes de nivel "Bachelor" en Ingeniería Biomédica (Biomedizin Technik). Los estudiantes NO tienen conocimientos previos de Python (no variables, listas, loops, ni pandas/matplotlib). El enfoque es "El Notebook como Instrumento": el notebook hace el trabajo y los estudiantes solo modifican parámetros específicos en cajas marcadas como "YOU MAY CHANGE THIS". No hay supervisión activa; la guía y el notebook dirigen la sesión. Se usará un LLM en el navegador con prompts predefinidos para ayudarles a entender y modificar el código.
+
+**Reglas de Formato de Salida:**
+Cada vez que generes una propuesta para una sesión, debes entregarla en formato Markdown (.md) utilizando las siguientes etiquetas para estructurar el contenido:
+- 📝 [TEXT] para texto de guías, diapositivas y celdas Markdown en Jupyter.
+- 💻 [CODE] para las celdas de código Python.
+- 🗂️ [STRUCTURE] para notas internas, de los organizadores o pendientes a REVISAR.
+- Idioma de los notebooks y código: Inglés.
+
+**Estado Actual (Sesión 4 - Completada en borrador):**
+La Sesión 4 trata sobre cargar datos CSV de sensores y graficarlos. Consta de 5 celdas: 1) Cargar CSV, 2) Graficar las 6 señales, 3) Elegir una señal (usando etiquetas de la Sesión 3), 4) Hacer Zoom (cortar ventana de tiempo), 5) Guardar figura PNG.
+
+**Tarea Inmediata (Sesión 3 - Motion Sensors: The Unlabelled Signals):**
+Debes generar el bosquejo en Markdown para la Sesión 3 en INGLÉS. 
+Características de la Sesión 3:
+- Celdas independientes para cada bloque: IMU en mano, IMU en pie, grabación misteriosa y exportar datos.
+- Conexión IMU: Por ahora en "modo replay" (simulando datos en vivo) con marcadores "REVIEW" donde irá la conexión real (Bluetooth/Capture2Go).
+- Gráfico en vivo: Las variables son DATA_SOURCE, 6 señales (Signal 1...6), ventana de tiempo, frecuencia provisional. Todo sin unidades ni nombres (es un juego de adivinar etiquetas).
+- Etiquetas del grupo: Se exportan en un CSV aparte (ej. labels_groupX.csv) que luego usará la Sesión 4.
+- CSV de datos: Incluir comentarios "REVIEW" sobre nombres de columnas, columna de tiempo (time_s), separador decimal y unidades.
+- Orden de las señales: Fijo.
+- Exportar: Los estudiantes descargan el CSV desde JupyterLite. Dejar comentario "REVIEW" sobre cómo subirlo a su carpeta de grupo.
+
+Por favor, actúa como el desarrollador instruccional y entrégame el bosquejo de la Sesión 3 cumpliendo estas reglas exactas.

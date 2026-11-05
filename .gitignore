@@ -12,4 +12,6 @@ __pycache__/
 /examples/*_IMU_*.bin
 /examples/*_IMU_*.mat
 /capture_to_go
-conteo_horas
+conteo_horas.md
+/administrativo
+/imes

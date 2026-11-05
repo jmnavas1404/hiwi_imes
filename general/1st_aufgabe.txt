@@ -1,0 +1,4 @@
+Aufgabe: eine JupyterNotebook erstellen
+
+für die Studenten von Bio-Medizintechnik (Bachelor) - session 3
+Python-Blockes, die die Studenten einfugen mussen. (alles auf Englisch) 
