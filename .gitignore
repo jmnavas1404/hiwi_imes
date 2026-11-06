@@ -1,6 +1,8 @@
 /administrativo
 /imes
 /general
+build
+dist
 windows
 mac
 linux

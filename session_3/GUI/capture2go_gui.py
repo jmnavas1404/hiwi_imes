@@ -192,7 +192,7 @@ class ConnectionDialog(tk.Toplevel):
             ),
             bg="#FFF8E7", fg=COLOR_TEXT,
             font=("Monospace", FONT_SIZE - 1),
-            justify=tk.LEFT, anchor="w", padx=8, pady=(0, 6)
+            justify=tk.LEFT, anchor="w", padx=8, pady=6
         ).pack(fill=tk.X)
 
         # ── Buttons ───────────────────────────────────────────────────────────
