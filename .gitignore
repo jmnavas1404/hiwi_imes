@@ -3,8 +3,8 @@
 /general
 build
 dist
-windows
-mac
+#windows
+#mac
 linux
 ki_vorschlag
 not_needed_any_more
