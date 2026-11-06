@@ -5,7 +5,7 @@ No Python installation required — just run the executable.
 
 ---
 
-## Files in this folder
+## Files in this folder 
 
 | File | Description |
 |------|-------------|
