@@ -6,12 +6,16 @@
 # Real-time GUI for the Capture2Go sensor - STUDENT VERSION
 # Packaged as a standalone executable (.exe / .app).
 # A connection dialog is shown at startup so no terminal arguments are needed.
+# On close, all recorded data is exported to a timestamped folder as CSV.
 #
 # Permission error on Linux?  Run once in a terminal:
 #   sudo usermod -aG dialout $USER
 # then log out and back in (or reboot).  After that the sensor will be found.
 
 import asyncio
+import csv
+import datetime
+import os
 import queue
 import sys
 import threading
@@ -42,6 +46,7 @@ COLOR_ORANGE      = "#E8822A"   # logo orange
 COLOR_ORANGE_DARK = "#C96A15"   # button hover / active
 COLOR_GRID        = "#D9DDE3"
 COLOR_SPINE       = "#B8BEC8"
+COLOR_GREEN       = "#2E7D32"   # success green
 
 CHANNEL_COLORS = [COLOR_BLUE, COLOR_ORANGE, COLOR_TEXT]
 CHANNEL_NAMES  = ["Channel 1", "Channel 2", "Channel 3"]
@@ -57,6 +62,10 @@ PLOT_INTERVAL_MS = 40
 
 # Anonymous signal names shown to students (no axis labels / units on purpose)
 SIGNAL_NAMES = ["Signal A", "Signal B", "Signal C", "Signal D"]
+
+# CSV export column names (matching reference_data.csv template)
+CSV_COLUMNS = ["time_s", "signal_1", "signal_2", "signal_3",
+               "signal_4", "signal_5", "signal_6"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,6 +102,121 @@ def run_stream_thread(device_name: str, data_queue: queue.Queue,
     loop = asyncio.new_event_loop()
     loop.run_until_complete(stream_sensor(device_name, data_queue, stop_event))
     loop.close()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Student info dialog  (shown before the connection dialog)
+# ──────────────────────────────────────────────────────────────────────────────
+
+class StudentInfoDialog(tk.Toplevel):
+    """
+    Modal dialog that collects the student's name and ID before connecting.
+    Sets self.student_name and self.student_id, or both None if cancelled.
+    """
+
+    def __init__(self, parent: tk.Tk):
+        super().__init__(parent)
+        self.title("Student Information")
+        self.resizable(False, False)
+        self.configure(bg=COLOR_BG)
+        self.grab_set()          # modal
+        self.student_name: str | None = None
+        self.student_id:   str | None = None
+
+        self._build()
+        self.protocol("WM_DELETE_WINDOW", self._cancel)
+
+        # Center on screen
+        self.update_idletasks()
+        x = (self.winfo_screenwidth()  - self.winfo_reqwidth())  // 2
+        y = (self.winfo_screenheight() - self.winfo_reqheight()) // 2
+        self.geometry(f"+{x}+{y}")
+
+    def _build(self):
+        # ── Header ────────────────────────────────────────────────────────────
+        tk.Label(
+            self, text="Capture2Go  ·  Student Info",
+            bg=COLOR_BLUE, fg="#FFFFFF",
+            font=("Monospace", 13, "bold"), pady=8
+        ).pack(fill=tk.X)
+
+        body = tk.Frame(self, bg=COLOR_BG, padx=24, pady=16)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        # ── Name ──────────────────────────────────────────────────────────────
+        tk.Label(body, text="Full name:", bg=COLOR_BG,
+                 fg=COLOR_TEXT, font=TK_FONT_BOLD).grid(
+            row=0, column=0, sticky="w", pady=(0, 2))
+
+        self._name_entry = tk.Entry(
+            body, font=TK_FONT, width=32,
+            bg=COLOR_PANEL, fg=COLOR_TEXT,
+            insertbackground=COLOR_BLUE,
+            relief=tk.FLAT, bd=4
+        )
+        self._name_entry.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        self._name_entry.focus_set()
+
+        # ── Matrikel / Student ID ─────────────────────────────────────────────
+        tk.Label(body, text="Matrikel-Nr. / Student ID:", bg=COLOR_BG,
+                 fg=COLOR_TEXT, font=TK_FONT_BOLD).grid(
+            row=2, column=0, sticky="w", pady=(0, 2))
+
+        self._id_entry = tk.Entry(
+            body, font=TK_FONT, width=32,
+            bg=COLOR_PANEL, fg=COLOR_TEXT,
+            insertbackground=COLOR_BLUE,
+            relief=tk.FLAT, bd=4
+        )
+        self._id_entry.grid(row=3, column=0, sticky="ew", pady=(0, 16))
+
+        # ── Buttons ───────────────────────────────────────────────────────────
+        btn_frame = tk.Frame(body, bg=COLOR_BG)
+        btn_frame.grid(row=4, column=0, sticky="e")
+
+        tk.Button(
+            btn_frame, text="Cancel",
+            bg=COLOR_PANEL, fg=COLOR_MUTED,
+            font=TK_FONT, relief=tk.FLAT, cursor="hand2",
+            command=self._cancel, padx=12, pady=4
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        tk.Button(
+            btn_frame, text="  Continue  ",
+            bg=COLOR_ORANGE, fg="#FFFFFF",
+            activebackground=COLOR_ORANGE_DARK, activeforeground="#FFFFFF",
+            font=TK_FONT_BOLD, relief=tk.FLAT, cursor="hand2",
+            command=self._confirm, padx=12, pady=4
+        ).pack(side=tk.LEFT)
+
+        # Allow Enter key to confirm
+        self.bind("<Return>", lambda _: self._confirm())
+
+    def _confirm(self):
+        name = self._name_entry.get().strip()
+        sid  = self._id_entry.get().strip()
+        if not name:
+            messagebox.showwarning(
+                "Missing name",
+                "Please enter your full name.",
+                parent=self
+            )
+            return
+        if not sid:
+            messagebox.showwarning(
+                "Missing student ID",
+                "Please enter your Matrikel-Nr. / student ID.",
+                parent=self
+            )
+            return
+        self.student_name = name
+        self.student_id   = sid
+        self.destroy()
+
+    def _cancel(self):
+        self.student_name = None
+        self.student_id   = None
+        self.destroy()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -241,6 +365,55 @@ class ConnectionDialog(tk.Toplevel):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Data export helper
+# ──────────────────────────────────────────────────────────────────────────────
+
+def export_data(student_name: str, student_id: str,
+                records: list[tuple]) -> str:
+    """
+    Write collected sensor data to a CSV file inside a named export folder.
+
+    Folder structure:
+        <StudentName>_<MatrikelNr>_<YYYYMMDD_HHMMSS>/
+            data.csv
+
+    The CSV follows the reference_data.csv template:
+        time_s, signal_1, signal_2, signal_3, signal_4, signal_5, signal_6
+
+    Signals exported:
+        signal_1 .. signal_3  →  accelerometer  x, y, z  (m/s²)
+        signal_4 .. signal_6  →  gyroscope       x, y, z  (deg/s)
+
+    Returns the path of the created folder.
+    """
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Sanitize name/id for use as folder name
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_"
+                        for c in student_name.replace(" ", "_"))
+    safe_id   = "".join(c if c.isalnum() or c in "-_" else "_"
+                        for c in student_id)
+    folder_name = f"{safe_name}_{safe_id}_{timestamp}"
+
+    # Place the export folder next to the executable / script
+    if getattr(sys, "frozen", False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+
+    export_dir = os.path.join(base_dir, folder_name)
+    os.makedirs(export_dir, exist_ok=True)
+
+    csv_path = os.path.join(export_dir, "data.csv")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(CSV_COLUMNS)
+        for row in records:
+            writer.writerow([f"{v:.4f}" for v in row])
+
+    return export_dir
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Main dashboard window
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -248,10 +421,14 @@ class SensorDashboard(tk.Tk):
     N_SAMPLES   = 800
     SAMPLE_RATE = 200.0
 
-    def __init__(self, device_name: str):
+    def __init__(self, device_name: str,
+                 student_name: str, student_id: str):
         super().__init__()
-        self.device_name = device_name
-        self.title(f"Capture2Go  ·  {device_name}")
+        self.device_name  = device_name
+        self.student_name = student_name
+        self.student_id   = student_id
+
+        self.title(f"Capture2Go  ·  {device_name}  ·  {student_name}")
         self.configure(bg=COLOR_BG)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -264,6 +441,11 @@ class SensorDashboard(tk.Tk):
         self._buffers = [np.full((self.N_SAMPLES, 3), np.nan) for _ in SIGNAL_NAMES]
         self._lines:  list = []
         self._pkt_count = 0
+
+        # ── Full recording storage ─────────────────────────────────────────────
+        # Each entry: (time_s, acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z)
+        self._records: list[tuple] = []
+        self._t_elapsed = 0.0   # running timestamp counter (seconds)
 
         self._build_ui()
         self._start_stream()
@@ -282,6 +464,23 @@ class SensorDashboard(tk.Tk):
             bg=COLOR_BLUE, fg="#FFFFFF",
             font=("Monospace", 14, "bold"), pady=8
         ).pack(side=tk.TOP, fill=tk.X)
+
+        # Student info banner
+        info_banner = tk.Frame(self, bg=COLOR_PANEL, pady=4)
+        info_banner.pack(side=tk.TOP, fill=tk.X, padx=8, pady=(4, 0))
+        tk.Label(
+            info_banner,
+            text=f"🎓  {self.student_name}  ·  ID: {self.student_id}",
+            bg=COLOR_PANEL, fg=COLOR_BLUE,
+            font=TK_FONT_BOLD
+        ).pack(side=tk.LEFT, padx=8)
+
+        self._rec_var = tk.StringVar(value="⏺  Recording: 0 samples")
+        tk.Label(
+            info_banner, textvariable=self._rec_var,
+            bg=COLOR_PANEL, fg=COLOR_MUTED,
+            font=TK_FONT
+        ).pack(side=tk.RIGHT, padx=8)
 
         main = tk.Frame(self, bg=COLOR_BG)
         main.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
@@ -354,9 +553,9 @@ class SensorDashboard(tk.Tk):
             command=self._reconnect
         ).pack(fill=tk.X, padx=8, pady=(0, 4))
 
-        # Stop button
+        # Stop / export button
         tk.Button(
-            left, text="⏹  Stop streaming",
+            left, text="⏹  Stop & Export data",
             bg=COLOR_ORANGE, fg="#FFFFFF",
             activebackground=COLOR_ORANGE_DARK, activeforeground="#FFFFFF",
             font=TK_FONT_BOLD, relief=tk.FLAT, cursor="hand2",
@@ -429,7 +628,7 @@ class SensorDashboard(tk.Tk):
         self.wait_window(dialog)
         if dialog.result:
             self.device_name = dialog.result
-            self.title(f"Capture2Go  ·  {self.device_name}")
+            self.title(f"Capture2Go  ·  {self.device_name}  ·  {self.student_name}")
             self._start_stream()
         else:
             self._status_var.set("⏸  Not connected")
@@ -454,21 +653,42 @@ class SensorDashboard(tk.Tk):
         parsed = packet.parse()
         n = len(parsed["gyr"])
         batches = [
-            np.rad2deg(parsed["gyr"]),
-            parsed["acc"],
-            parsed["mag"],
+            np.rad2deg(parsed["gyr"]),       # Signal A: gyroscope  (deg/s)
+            parsed["acc"],                   # Signal B: accelerometer (m/s²)
+            parsed["mag"],                   # Signal C: magnetometer
             np.rad2deg(np.array([
                 c2g.utils.eulerAngles(parsed["quat9D"][i], "zxy", True)
                 for i in range(n)
-            ])),
+            ])),                             # Signal D: Euler angles (deg)
         ]
+
+        # ── Update rolling display buffers ─────────────────────────────────
         for idx, batch in enumerate(batches):
             self._buffers[idx] = np.vstack([self._buffers[idx][n:], batch])
             for ch in range(3):
                 self._value_vars[idx][ch].set(f"{batch[-1][ch]:+8.2f}")
 
+        # ── Accumulate full recording (acc + gyr → 6-column CSV) ───────────
+        # Signal B = acc (m/s²),  Signal A = gyr (deg/s)
+        acc_batch = batches[1]   # shape (n, 3)
+        gyr_batch = batches[0]   # shape (n, 3)
+        dt = 1.0 / self.SAMPLE_RATE
+        for i in range(n):
+            t = self._t_elapsed
+            self._records.append((
+                round(t, 5),
+                round(acc_batch[i, 0], 4),
+                round(acc_batch[i, 1], 4),
+                round(acc_batch[i, 2], 4),
+                round(gyr_batch[i, 0], 4),
+                round(gyr_batch[i, 1], 4),
+                round(gyr_batch[i, 2], 4),
+            ))
+            self._t_elapsed += dt
+
         self._pkt_count += 1
         self._pkt_var.set(str(self._pkt_count))
+        self._rec_var.set(f"⏺  Recording: {len(self._records)} samples")
         self._status_var.set("🟢  Streaming active")
 
     def _show_error(self, exc: Exception):
@@ -495,10 +715,38 @@ class SensorDashboard(tk.Tk):
             artists += lines
         return artists
 
-    # ── Shutdown ──────────────────────────────────────────────────────────────
+    # ── Shutdown & Export ─────────────────────────────────────────────────────
 
     def _on_close(self):
+        """Stop streaming, export data, then close the window."""
         self._stop_event.set()
+
+        if self._records:
+            try:
+                export_dir = export_data(
+                    self.student_name,
+                    self.student_id,
+                    self._records,
+                )
+                messagebox.showinfo(
+                    "Data exported",
+                    f"✅  Session data saved successfully!\n\n"
+                    f"📁  Folder:\n{export_dir}\n\n"
+                    f"📄  File:  data.csv\n"
+                    f"📊  Samples: {len(self._records)}",
+                )
+            except Exception as exc:
+                messagebox.showerror(
+                    "Export error",
+                    f"Could not save data:\n{exc}"
+                )
+        else:
+            messagebox.showinfo(
+                "No data recorded",
+                "No sensor data was received during this session.\n"
+                "Nothing was exported."
+            )
+
         self.destroy()
 
 
@@ -507,23 +755,39 @@ class SensorDashboard(tk.Tk):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def main():
-    # Hidden root so the connection dialog appears without a main window first
+    # Hidden root so dialogs appear without a main window first
     root = tk.Tk()
     root.withdraw()
 
-    dialog = ConnectionDialog(root)
-    root.wait_window(dialog)
+    # ── Step 1: Collect student info ──────────────────────────────────────────
+    student_dialog = StudentInfoDialog(root)
+    root.wait_window(student_dialog)
 
-    if not dialog.result:
+    if not student_dialog.student_name:
+        root.destroy()
+        sys.exit(0)
+
+    student_name = student_dialog.student_name
+    student_id   = student_dialog.student_id
+
+    # ── Step 2: Connect to sensor ─────────────────────────────────────────────
+    conn_dialog = ConnectionDialog(root)
+    root.wait_window(conn_dialog)
+
+    if not conn_dialog.result:
         root.destroy()
         sys.exit(0)
 
     root.destroy()
 
-    app = SensorDashboard(device_name=dialog.result)
+    # ── Step 3: Run the dashboard ─────────────────────────────────────────────
+    app = SensorDashboard(
+        device_name=conn_dialog.result,
+        student_name=student_name,
+        student_id=student_id,
+    )
     app.mainloop()
 
 
 if __name__ == "__main__":
     main()
-
