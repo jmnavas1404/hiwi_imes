@@ -4,7 +4,7 @@ Use a free chat assistant in your browser. Copy a prompt, replace the text in [s
 
 **Which prompts do I use?**
 - **Simple notebook:** Prompts 1, 2 and 3.
-- **Advanced notebook:** Prompts 1, 4, 5 and 6 (Prompt 2 and 3 also work, but 4–6 are made for code you write yourself).
+- **Advanced notebook:** Prompts 4, 5 and 6.
 
 ---
 
