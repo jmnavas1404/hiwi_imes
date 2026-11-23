@@ -1,7 +1,7 @@
 # pip install qrcode[pil]
 import qrcode
 
-url = "https://github.com/jmnavas1404/hiwi_imes.git"
+url = "https://jmnavas1404.github.io/hiwi_imes/"
 
 qr = qrcode.QRCode(
     error_correction=qrcode.constants.ERROR_CORRECT_H,  # tolera daños/suciedad
