@@ -1,0 +1,1600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capture2Go</title>
+<style>
+/* Capture2Go web app – modern card layout. Brand colours as in the desktop program (blue #00569E, orange #E8822A). */
+:root {
+  --bg: #F2F5F9; --card: #FFFFFF; --text: #1E2A3A; --muted: #6B7686; --line: #E6EAF0;
+  --blue: #00569E; --blue-dark: #0A3D73; --blue-soft: #E8F0F9;
+  --orange: #E8822A; --orange-dark: #C96A15; --orange-soft: #FDF1E6;
+  --green: #2E7D32; --green-dark: #256628; --green-soft: #E7F4E8;
+  --red: #D93B3B;
+  --radius: 14px; --radius-sm: 9px;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .06);
+  --ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font: 14px/1.4 var(--ui); -webkit-font-smoothing: antialiased; }
+#app { height: 100%; display: flex; flex-direction: column; }
+button { font: 600 14px var(--ui); border: 0; cursor: pointer; border-radius: var(--radius-sm); padding: 9px 16px;
+  transition: background-color .15s, box-shadow .15s, transform .05s; }
+button:active:not(:disabled) { transform: translateY(1px); }
+button:focus-visible, .seg input:focus-visible + span { outline: 3px solid rgba(0, 86, 158, .35); outline-offset: 2px; }
+.hidden { display: none !important; }
+
+/* ── dialogs ─────────────────────────────────────────────────────────── */
+.overlay { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
+  background: rgba(15, 30, 50, .35); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  animation: fade .15s ease-out; }
+.dialog { background: var(--card); width: min(460px, calc(100vw - 32px)); max-width: 640px; border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(10, 30, 60, .28); overflow: hidden; animation: pop .18s ease-out; }
+.dialog-title { padding: 18px 24px 4px; font-size: 18px; font-weight: 700; color: var(--blue-dark); display: flex; align-items: center; gap: 10px; }
+.dialog-title::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--orange);
+  box-shadow: 0 0 0 4px var(--orange-soft); flex: none; }
+.dialog-body { padding: 12px 24px 4px; }
+.dialog-buttons { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 20px; }
+.label-bold { font-weight: 600; margin-bottom: 6px; font-size: 13px; color: var(--muted); }
+.field { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+.field > label { font-size: 13px; color: var(--muted); font-weight: 600; }
+.entry { font: 15px var(--ui); background: #F7F9FC; color: var(--text); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); padding: 9px 12px; transition: border-color .15s, box-shadow .15s; }
+.entry:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 4px var(--blue-soft); background: #fff; }
+/* radio buttons shown as a segmented control */
+.radios { display: flex; gap: 0; margin-bottom: 14px; background: #EEF2F7; border-radius: 11px; padding: 4px; }
+.radio { flex: 1; position: relative; text-align: center; cursor: pointer; }
+.radio input { position: absolute; opacity: 0; pointer-events: none; }
+.radio span { display: block; padding: 8px 10px; border-radius: 8px; font-weight: 600; color: var(--muted);
+  transition: background-color .15s, color .15s, box-shadow .15s; white-space: nowrap; }
+.radio input:checked + span { background: #fff; color: var(--blue); box-shadow: 0 1px 3px rgba(16, 24, 40, .12); }
+.radio.disabled { cursor: not-allowed; opacity: .45; }
+button.primary { background: var(--orange); color: #fff; box-shadow: 0 2px 6px rgba(232, 130, 42, .35); }
+button.primary:hover { background: var(--orange-dark); }
+button.secondary { background: #EEF2F7; color: var(--muted); }
+button.secondary:hover { background: #E3E8EF; }
+.note { background: var(--orange-soft); border-radius: var(--radius-sm); margin-bottom: 14px; }
+.note-title { color: var(--orange-dark); font-weight: 700; padding: 8px 12px 2px; }
+.note-text { margin: 0; padding: 2px 12px 10px; font: 13px var(--mono); }
+.small-muted { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+.msg { display: flex; gap: 14px; align-items: flex-start; padding-bottom: 6px; }
+.msg-icon { width: 36px; height: 36px; flex: none; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; background: var(--blue-soft); color: var(--blue); }
+.msg-warning .msg-icon { background: var(--orange-soft); color: var(--orange-dark); }
+.msg-error .msg-icon { background: #FCEAEA; color: var(--red); }
+.msg-text { margin: 6px 0 0; white-space: pre-wrap; font: 14px/1.5 var(--ui); }
+
+/* ── dashboard ───────────────────────────────────────────────────────── */
+.app-header { background: linear-gradient(110deg, var(--blue-dark) 0%, var(--blue) 60%, #1B78C4 100%); color: #fff;
+  font-weight: 700; font-size: 17px; letter-spacing: .2px; padding: 13px 22px; display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 2px 10px rgba(0, 40, 90, .25); }
+.app-header::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: var(--orange);
+  box-shadow: 0 0 0 4px rgba(232, 130, 42, .3); }
+.banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px 0; }
+.chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-weight: 600;
+  background: var(--card); box-shadow: var(--shadow); }
+.banner-name { color: var(--blue); }
+.rec-label { color: var(--muted); font-weight: 500; }
+.rec-label.recording { color: var(--red); background: #FDEDED; }
+.rec-label.recording { animation: pulse 1.6s ease-in-out infinite; }
+
+.main { flex: 1; min-height: 0; display: grid; gap: 14px; padding: 14px 16px 16px;
+  grid-template-columns: 300px minmax(0, 1fr) 300px; grid-template-areas: "values plots side"; }
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-title { font-weight: 700; color: var(--blue-dark); font-size: 14px; padding: 14px 16px 8px; display: flex; align-items: center; gap: 8px; }
+.values { grid-area: values; display: flex; flex-direction: column; min-height: 0; }
+.side { grid-area: side; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.value-table { padding: 0 10px 12px; overflow-y: auto; min-height: 0; font-size: 13px; }
+.vt-section { color: var(--orange-dark); font-weight: 700; font-size: 12px; letter-spacing: .2px; padding: 10px 6px 4px; }
+.vt-row { display: flex; align-items: center; gap: 8px; padding: 3px 6px; border-radius: 7px; }
+.vt-row:hover { background: #F5F7FA; }
+.vt-swatch { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.vt-label { color: var(--muted); flex: 1; }
+.vt-value { color: var(--text); font: 600 13px var(--mono); white-space: pre; text-align: right; min-width: 74px; font-variant-numeric: tabular-nums; }
+.controls { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.status { padding: 8px 12px; border-radius: var(--radius-sm); background: #F5F7FA; overflow-wrap: anywhere; font-weight: 500; }
+.btn { width: 100%; text-align: center; }
+.btn-green { background: var(--green); color: #fff; box-shadow: 0 2px 6px rgba(46, 125, 50, .3); }
+.btn-green:hover { background: var(--green-dark); }
+.btn-plain { background: var(--blue-soft); color: var(--blue); }
+.btn-plain:hover { background: #DCE8F5; }
+.btn-orange { background: var(--orange); color: #fff; box-shadow: 0 2px 6px rgba(232, 130, 42, .35); }
+.btn-orange:hover { background: var(--orange-dark); }
+.btn-muted, .btn-muted:hover { background: #E9EDF2; color: var(--muted); box-shadow: none; cursor: default; }
+.view-card { flex: 1; min-height: 260px; display: flex; flex-direction: column; }
+.view3d { width: 100%; flex: 1; min-height: 200px; display: block; }
+.view3d-hint { color: var(--muted); font-size: 11.5px; text-align: center; padding: 4px 10px 12px; }
+.plots { grid-area: plots; min-width: 0; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 14px; }
+.plot-card { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.plot-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px 0; flex-wrap: wrap; }
+.plot-title { font-weight: 700; color: var(--blue-dark); font-size: 14px; }
+.legend { display: flex; gap: 6px; flex-wrap: wrap; }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); background: #F5F7FA;
+  padding: 2px 9px; border-radius: 999px; }
+.legend-item i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.plot { width: 100%; flex: 1; min-height: 0; display: block; }
+
+.finished { margin: auto; max-width: 560px; text-align: center; padding: 36px 32px; }
+.finished h1 { color: var(--blue-dark); font-size: 24px; margin: 0 0 10px; }
+.finished p { color: var(--muted); }
+.finished .btn { width: auto; padding: 10px 22px; margin-top: 14px; }
+
+/* narrower screens: controls + 3D view move below the value table */
+@media (max-width: 1360px) {
+  .main { grid-template-columns: 260px minmax(0, 1fr) 250px; gap: 12px; padding: 12px; }
+  .plots { gap: 12px; }
+  .view-card { min-height: 200px; }
+}
+@media (max-width: 1080px) {
+  .main { grid-template-columns: 250px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "side plots" "values plots"; }
+  .view-card { min-height: 220px; }
+}
+@media (max-width: 860px) {
+  #app { height: auto; }
+  .main { grid-template-columns: 1fr; grid-template-areas: "side" "plots" "values"; }
+  .plots { grid-template-columns: 1fr; grid-template-rows: repeat(4, 260px); }
+}
+
+@keyframes fade { from { opacity: 0; } }
+@keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 5px rgba(217, 59, 59, .12); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+</style>
+</head>
+<body>
+<div id="app"></div>
+<noscript>This page needs JavaScript. Please open it in Google Chrome or Microsoft Edge.</noscript>
+<script>
+/* ---- js/protocol.js ---- */
+/*
+ * Capture2Go binary protocol: package framing, CRC, parsing of the packages used by the app.
+ *
+ * JavaScript port of the relevant parts of the Capture2Go Python SDK
+ * (capture2go/pkg.py, parsing.py, utils.py),
+ * SPDX-FileCopyrightText: 2025 SensorStim Neurotechnology GmbH, SPDX-License-Identifier: MIT.
+ *
+ * Frame layout (little endian):  [0x02][crc32: u32][payloadSize: u8][header: u16][payload ...]
+ * The CRC is zlib.crc32 over header + payload.
+ */
+'use strict';
+
+const C2G = (() => {
+  const H = {
+    CMD_GET_DEVICE_INFO: 0x0070,
+    DATA_DEVICE_INFO: 0x0071,
+    CMD_SET_MEASUREMENT_MODE: 0x0120,
+    DATA_MEASUREMENT_MODE: 0x0122,
+    CMD_START_STREAMING: 0x0150,
+    ACK_START_STREAMING: 0x0151,
+    CMD_STOP_STREAMING: 0x0152,
+    ACK_STOP_STREAMING: 0x0153,
+    CMD_STOP_RECORDING: 0x0156,
+    CMD_STOP_STREAMING_AND_CLEAR_BUFFER: 0x0158,
+    ACK_STOP_STREAMING_AND_CLEAR_BUFFER: 0x0159,
+    CMD_SET_ABSOLUTE_TIME: 0x0170,
+    DATA_STATUS: 0x0201,
+    ERROR: 0xFFFF,
+  };
+
+  const SensorState = { OFF: 0, IDLE: 1, STREAMING: 2, RECORDING: 3 };
+  const SamplingMode = { MODE_DISABLED: 0, MODE_200HZ: 1, MODE_100HZ: 2, MODE_50HZ: 3, MODE_25HZ: 4, MODE_10HZ: 5, MODE_1HZ: 6 };
+
+  // DataFullPacked<rate>Hz headers -> rate
+  const FULL_PACKED_RATES = { 0x0221: 200, 0x0222: 100, 0x0223: 50, 0x0224: 25, 0x0225: 10, 0x0226: 1 };
+
+  // Payload sizes of all package types defined in the SDK (header -> size). Needed to validate frames and
+  // to skip packages the app does not use. null = variable size.
+  const SIZES = {
+    0x0070: 0, 0x0071: 47, 0x0110: 0, 0x0111: 0, 0x0112: 0, 0x0113: 0,
+    0x0120: 30, 0x0121: 0, 0x0122: 30, 0x0123: 19, 0x0124: 0, 0x0125: 19,
+    0x0140: 74, 0x0141: 0, 0x0142: 74,
+    0x0150: 0, 0x0151: 0, 0x0152: 0, 0x0153: 0, 0x0154: 0, 0x0155: 0, 0x0156: 0, 0x0157: 0, 0x0158: 0, 0x0159: 0,
+    0x0160: 2, 0x0161: 0, 0x0162: 2, 0x0163: 0, 0x0164: 0,
+    0x0170: 8, 0x0171: 8, 0x0172: 32,
+    0x0180: 6, 0x0181: 0, 0x0182: 6, 0x0183: 17, 0x0184: 0, 0x0185: 17, 0x0186: 17, 0x0187: 17,
+    0x0200: 0, 0x0201: 19,
+    0x0221: 163, 0x0222: 163, 0x0223: 163, 0x0224: 163, 0x0225: 163, 0x0226: 163,
+  };
+
+  // ---------------------------------------------------------------- CRC32 (same as zlib.crc32)
+  const CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(bytes, start = 0, end = bytes.length) {
+    let c = 0xFFFFFFFF;
+    for (let i = start; i < end; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  // ---------------------------------------------------------------- building commands
+  function pack(header, payload = new Uint8Array(0)) {
+    const data = new Uint8Array(2 + payload.length);
+    data[0] = header & 0xFF; data[1] = (header >> 8) & 0xFF;
+    data.set(payload, 2);
+    const out = new Uint8Array(6 + data.length);
+    const dv = new DataView(out.buffer);
+    out[0] = 2;
+    dv.setUint32(1, crc32(data), true);
+    out[5] = payload.length;
+    out.set(data, 6);
+    return out;
+  }
+
+  const cmd = {
+    getDeviceInfo: () => pack(H.CMD_GET_DEVICE_INFO),
+    startStreaming: () => pack(H.CMD_START_STREAMING),
+    stopStreaming: () => pack(H.CMD_STOP_STREAMING),
+    stopRecording: () => pack(H.CMD_STOP_RECORDING),
+    stopStreamingAndClearBuffer: () => pack(H.CMD_STOP_STREAMING_AND_CLEAR_BUFFER),
+    /** CmdSetMeasurementMode(fullPackedMode=..., statusMode=...), all other fields 0 (as in the SDK default). */
+    setMeasurementMode: ({ fullPackedMode = 0, statusMode = 0 } = {}) => {
+      const p = new Uint8Array(30);
+      p[10] = fullPackedMode;     // offsets: timestamp 0..7, fullFloat200HzEnabled 8, fullFixedMode 9,
+      p[14] = statusMode;         // fullPackedMode 10, quat* 11..13, statusMode 14, ...
+      return pack(H.CMD_SET_MEASUREMENT_MODE, p);
+    },
+    /** CmdSetAbsoluteTime(newTimestamp=time_ns) */
+    setAbsoluteTime: (ns) => {
+      const p = new Uint8Array(8);
+      new DataView(p.buffer).setBigInt64(0, BigInt(ns), true);
+      return pack(H.CMD_SET_ABSOLUTE_TIME, p);
+    },
+  };
+
+  // ---------------------------------------------------------------- math (utils.py)
+  function qmult(a, b) {
+    return [
+      a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+      a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+      a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+      a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0],
+    ];
+  }
+
+  function quatFromGyr(g, rate) {
+    let norm = Math.hypot(g[0], g[1], g[2]);
+    const angle = norm / rate;
+    if (angle < Number.EPSILON) norm = 1;
+    const s = Math.sin(angle / 2);
+    return [Math.cos(angle / 2), s * g[0] / norm, s * g[1] / norm, s * g[2] / norm];
+  }
+
+  function addHeading(q, delta) {
+    return qmult([Math.cos(delta / 2), 0, 0, Math.sin(delta / 2)], q);
+  }
+
+  /** decodeQuat: 64-bit packed quaternion (BigInt) -> {q:[w,x,y,z], rest, magDist} */
+  function decodeQuat(quat) {
+    const out = [0, 0, 0, 0];
+    const rest = ((quat >> 62n) & 1n) === 1n;
+    const magDist = ((quat >> 63n) & 1n) === 1n;
+    const ax = Number((quat >> 60n) & 3n);
+    let sqSum = 0;
+    for (let i = 3; i > 0; i--) {
+      const val = Number(quat & 0xFFFFFn) / (0xFFFFF / Math.SQRT2) - 1 / Math.SQRT2;
+      sqSum += val * val;
+      out[(ax + i) % 4] = val;
+      quat >>= 20n;
+    }
+    if (sqSum > 1) out.fill(NaN);
+    else out[ax] = Math.sqrt(1 - sqSum);
+    return { q: out, rest, magDist };
+  }
+
+  /** eulerAngles(q, axes, intrinsic) -> [a1, a2, a3] in rad (port of utils.eulerAngles) */
+  function eulerAngles(q, axes = 'zyx', intrinsic = true) {
+    const id = { x: 1, y: 2, z: 3 };
+    if (intrinsic) axes = axes.split('').reverse().join('');
+    const a = id[axes[0]], b = id[axes[1]], c = id[axes[2]];
+    let d = null;
+    if (a === c) d = [1, 2, 3].find(v => v !== a && v !== b);
+    const s = (b === (a % 3) + 1) ? 1 : -1;
+    const clip = v => Math.min(1, Math.max(-1, v));
+    let a1, a2, a3;
+    if (a === c) {
+      a1 = Math.atan2(q[a] * q[b] - s * q[d] * q[0], q[b] * q[0] + s * q[a] * q[d]);
+      a2 = Math.acos(clip(q[0] ** 2 + q[a] ** 2 - q[b] ** 2 - q[d] ** 2));
+      a3 = Math.atan2(q[a] * q[b] + s * q[d] * q[0], q[b] * q[0] - s * q[a] * q[d]);
+    } else {
+      a1 = Math.atan2(2 * (q[a] * q[0] + s * q[b] * q[c]), q[0] ** 2 - q[a] ** 2 - q[b] ** 2 + q[c] ** 2);
+      a2 = Math.asin(clip(2 * (q[b] * q[0] - s * q[a] * q[c])));
+      a3 = Math.atan2(2 * (s * q[a] * q[b] + q[c] * q[0]), q[0] ** 2 + q[a] ** 2 - q[b] ** 2 - q[c] ** 2);
+    }
+    return intrinsic ? [a3, a2, a1] : [a1, a2, a3];
+  }
+
+  // ---------------------------------------------------------------- package parsing
+  const GYR_SCALE = (2000.0 * Math.PI / 180) / 32768.0;
+  const ACC_SCALE = 16.0 / 32768.0 * 9.81;
+  const MAG_SCALE = 1.0 / 16.0;
+  const DELTA_SCALE = Math.PI / 32768.0;
+
+  function cstr(bytes) {
+    let s = '';
+    for (const b of bytes) { if (b === 0) break; s += String.fromCharCode(b); }
+    return s.trim();
+  }
+
+  /** payload (Uint8Array) of a known header -> package object {type, header, ...fields} */
+  function parsePayload(header, p) {
+    const dv = new DataView(p.buffer, p.byteOffset, p.byteLength);
+    if (header in FULL_PACKED_RATES) {
+      const rate = FULL_PACKED_RATES[header];
+      const gyr = [], acc = [], mag = [];
+      for (let i = 0; i < 8; i++) {
+        gyr.push([0, 1, 2].map(k => dv.getInt16(8 + (i * 3 + k) * 2, true) * GYR_SCALE));
+        acc.push([0, 1, 2].map(k => dv.getInt16(56 + (i * 3 + k) * 2, true) * ACC_SCALE));
+        mag.push([0, 1, 2].map(k => dv.getInt16(104 + (i * 3 + k) * 2, true) * MAG_SCALE));
+      }
+      const quatRaw = dv.getBigUint64(152, true);
+      const delta = dv.getInt16(160, true) * DELTA_SCALE;
+      const dec = decodeQuat(quatRaw);
+      const quat = [dec.q], quat9D = [addHeading(dec.q, delta)];
+      for (let i = 0; i < 7; i++) {
+        quat.push(qmult(quat[i], quatFromGyr(gyr[i + 1], rate)));
+        quat9D.push(addHeading(quat[i + 1], delta));
+      }
+      return {
+        type: 'DataFullPacked', header, rate, timestamp: dv.getBigInt64(0, true),
+        gyr, acc, mag, quat, quat9D, delta, restDetected: dec.rest, magDistDetected: dec.magDist,
+        errorFlags: p[162],
+      };
+    }
+    switch (header) {
+      case H.DATA_STATUS: {
+        const battery = p[17];
+        const charging = (battery & 0x80) !== 0;
+        return {
+          type: 'DataStatus', header, timestamp: dv.getBigInt64(0, true), sensorState: p[8], connectionState: p[9],
+          synchronized: p[16] !== 0, batteryPercentage: charging ? battery - 0x80 : battery, isCharging: charging,
+          freeStoragePercentage: p[18],
+        };
+      }
+      case H.DATA_DEVICE_INFO:
+        return {
+          type: 'DataDeviceInfo', header, protocolVersion: dv.getUint16(0, true), serial: cstr(p.subarray(2, 8)),
+          hardwareRevision: cstr(p.subarray(8, 16)), firmwareRevision: cstr(p.subarray(16, 24)),
+          firmwareVersion: cstr(p.subarray(24, 36)), firmwareDate: cstr(p.subarray(36, 47)),
+        };
+      case H.ERROR:
+        return { type: 'SensorError', header, errorCode: p[0], command: dv.getUint16(1, true) };
+      case H.ACK_START_STREAMING: return { type: 'AckStartStreaming', header };
+      case H.ACK_STOP_STREAMING: return { type: 'AckStopStreaming', header };
+      case H.ACK_STOP_STREAMING_AND_CLEAR_BUFFER: return { type: 'AckStopStreamingAndClearBuffer', header };
+      default: return { type: 'Other', header };
+    }
+  }
+
+  function isKnown(header) { return header in SIZES || header === H.ERROR || isOtherKnown(header); }
+  // Headers of SDK packages whose payload layout the app does not need (sizes unchecked, payload skipped).
+  function isOtherKnown(header) {
+    return (header >= 0x0231 && header <= 0x0236) || (header >= 0x0241 && header <= 0x0247) ||
+      (header >= 0x0251 && header <= 0x0256) || header === 0x0261 || (header >= 0x0271 && header <= 0x02FF) ||
+      (header >= 0x0300 && header <= 0x05FF);
+  }
+  function expectedSize(header) {
+    if (header === H.ERROR) return 3;
+    return (header in SIZES) ? SIZES[header] : null;   // null: not checked
+  }
+
+  // ---------------------------------------------------------------- Unpacker (parsing.py)
+  class Unpacker {
+    constructor(ignoreInitialGarbage = true) {
+      this.ignoreInitialGarbage = ignoreInitialGarbage;
+      this.waitForAckStopStreamingAndClearBuffer = false;
+      this.buffer = new Uint8Array(0);
+      this.rtPackages = [];
+    }
+
+    feed(data) {
+      const b = new Uint8Array(this.buffer.length + data.length);
+      b.set(this.buffer, 0); b.set(data, this.buffer.length);
+      this.buffer = b;
+    }
+
+    /** BLE only: strip real-time packages from the start of a notification, return remaining bytes */
+    extractRtPackages(data) {
+      if (data.length === 0) return data;
+      const count = 0xFF - data[0];
+      if (count > 3) throw new Error(`unexpected number of RT packages: ${count}`);
+      let pos = 1;
+      for (let n = 0; n < count; n++) {
+        if (data.length < pos + 8) throw new Error('not enough data available to extract frame of RT package');
+        const size = data[pos + 5];
+        const header = data[pos + 6] | (data[pos + 7] << 8);
+        if (data[pos] !== 2) throw new Error('frame error in RT stream');
+        if (data.length < pos + 8 + size) throw new Error('not enough data available to extract RT package');
+        const crc = new DataView(data.buffer, data.byteOffset + pos + 1, 4).getUint32(0, true);
+        if (crc32(data, pos + 6, pos + size + 8) !== crc) throw new Error('crc mismatch in RT package');
+        if (!isKnown(header)) throw new Error(`unknown class 0x${header.toString(16)}`);
+        this.rtPackages.push(parsePayload(header, data.slice(pos + 8, pos + 8 + size)));
+        pos += size + 8;
+      }
+      return data.subarray(pos);
+    }
+
+    /**
+     * returns next package or null if more data is needed.
+     * Unlike the Python SDK, the reader ALWAYS re-synchronises: a frame with a wrong start byte, a wrong CRC or an
+     * unexpected size is skipped byte by byte until the next valid frame. This is needed because
+     * "stop streaming and clear buffer" cuts the package that is being sent in half (measured with IMU_7ca32a);
+     * the SDK reader stops on that error and the session hangs. The CRC still protects against wrong values.
+     */
+    next() {
+      if (this.rtPackages.length) return this.rtPackages.shift();
+      for (;;) {
+        const buf = this.buffer;
+        if (buf.length < 8) return null;
+        const start = buf[0];
+        const size = buf[5];
+        const header = buf[6] | (buf[7] << 8);
+        if (start !== 2) { this.buffer = buf.subarray(1); this.skippedBytes = (this.skippedBytes || 0) + 1; continue; }
+        if (buf.length < 8 + size) return null;
+        const crc = new DataView(buf.buffer, buf.byteOffset + 1, 4).getUint32(0, true);
+        const exp = expectedSize(header);
+        if (crc32(buf, 6, size + 8) !== crc || (isKnown(header) && exp !== null && exp !== size)) {
+          this.buffer = buf.subarray(1); this.skippedBytes = (this.skippedBytes || 0) + 1; continue;
+        }
+        this.buffer = buf.subarray(size + 8);
+        if (!isKnown(header)) continue;                       // unknown class: skip
+        return parsePayload(header, buf.slice(8, 8 + size));
+      }
+    }
+  }
+
+  return { H, SensorState, SamplingMode, crc32, pack, cmd, qmult, quatFromGyr, addHeading, decodeQuat, eulerAngles, Unpacker };
+})();
+
+</script>
+<script>
+/* ---- js/device.js ---- */
+/*
+ * Sensor connection (Web Bluetooth / Web Serial) and the streaming loop.
+ *
+ * Port of capture2go/device.py, ble.py, usb.py (Capture2Go Python SDK, MIT, SensorStim Neurotechnology GmbH)
+ * and of stream_sensor()/_connect_with_retries() from the Capture2Go teaching app (session_3.py).
+ */
+'use strict';
+
+const NUS_SERVICE = '80030001-e629-4c98-9324-aa7fc0c66de7';
+const NUS_RX = '80030002-e629-4c98-9324-aa7fc0c66de7';
+const NUS_TX = '80030003-e629-4c98-9324-aa7fc0c66de7';
+
+const CONNECT_RETRIES = 3;
+const CONNECT_TIMEOUT_S = 20.0;
+const RETRY_DELAY_S = 2.0;
+const DATA_TIMEOUT_S = 6.0;
+const STARTUP_TIMEOUT_S = 10.0;   // limit for the start-up handshake (measured: 1.1 s idle, 2.2 s after an unclean end)
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function withTimeout(promise, ms, makeError) {
+  let t;
+  return Promise.race([promise, new Promise((_, rej) => { t = setTimeout(() => rej(makeError()), ms); })])
+    .finally(() => clearTimeout(t));
+}
+
+/** Base class: package queue + init() handshake (device.py AbstractDevice). */
+class AbstractDevice {
+  constructor() {
+    this.name = '';
+    this.state = 'disconnected';
+    this.status = null;
+    this.deviceInfo = null;
+    this.unpacker = new C2G.Unpacker(true);
+    this._queue = [];
+    this._waiters = [];
+    this._closed = false;
+    this._packageListeners = new Set();
+  }
+
+  _feed(data, extractRt) {
+    if (extractRt) data = this.unpacker.extractRtPackages(data);
+    this.unpacker.feed(data);
+    let p;
+    while ((p = this.unpacker.next()) !== null) {
+      if (p.type === 'DataDeviceInfo') { this.deviceInfo = p; this.name = `IMU_${p.serial}`; }
+      else if (p.type === 'DataStatus') { this.status = p; }
+      for (const l of this._packageListeners) l(p);
+      this._push(p);
+    }
+  }
+
+  _push(item) {
+    const w = this._waiters.shift();
+    if (w) w(item); else this._queue.push(item);
+  }
+
+  _onDisconnected() {
+    this.state = 'disconnected';
+    this._closed = true;
+    this._push({ type: '__disconnected__' });
+  }
+
+  /** next package; resolves {type:'__disconnected__'} when the connection is gone */
+  nextPackage() {
+    if (this._queue.length) return Promise.resolve(this._queue.shift());
+    if (this._closed) return Promise.resolve({ type: '__disconnected__' });
+    return new Promise(r => this._waiters.push(r));
+  }
+
+  _waitFor(pred) {
+    return new Promise(resolve => {
+      if (pred()) { resolve(); return; }
+      const l = () => { if (pred()) { this._packageListeners.delete(l); resolve(); } };
+      this._packageListeners.add(l);
+    });
+  }
+
+  /**
+   * Robust start-up handshake (replaces the SDK's init(setTime=True, abortStreaming=True)).
+   * Measured with IMU_7ca32a: if a previous session ended without a clean stop, the sensor is still streaming,
+   * and the SDK's "wait for the stop-acknowledge" step hangs (the reason students had to press Reconnect).
+   * Here: always stop and clear any old stream first, then ask for the device info every second until it
+   * arrives (the first answer can be lost in the cut-off package), then set the clock.
+   */
+  async init({ setTime = false } = {}) {
+    await this.send(C2G.cmd.stopStreamingAndClearBuffer());
+    let asks = 0;
+    while (this.deviceInfo === null) {
+      if (asks >= 8) throw new Error('The sensor did not answer the device-info request');
+      await this.send(C2G.cmd.getDeviceInfo());
+      asks += 1;
+      await Promise.race([this._waitFor(() => this.deviceInfo !== null), sleep(1000)]);
+    }
+    if (this.status && this.status.sensorState === C2G.SensorState.RECORDING) {
+      throw new Error('The sensor is currently recording (DeviceIsRecording).');
+    }
+    if (setTime) await this.send(C2G.cmd.setAbsoluteTime(BigInt(Date.now()) * 1000000n));
+    // drop anything left over from an old stream
+    this._queue = this._queue.filter(p => p.type !== 'DataFullPacked');
+    this.initRequests = asks;
+  }
+}
+
+/** Bluetooth LE (Nordic-UART-like service), ble.py BleDevice */
+class BleDevice extends AbstractDevice {
+  constructor(btDevice) {
+    super();
+    this.bt = btDevice;
+    this.name = btDevice.name || '';
+    this._rx = null; this._tx = null;
+    this._onValue = ev => {
+      const v = ev.target.value;
+      try { this._feed(new Uint8Array(v.buffer.slice(v.byteOffset, v.byteOffset + v.byteLength)), true); }
+      catch (e) { this.unpacker.rtPackages = []; }   // broken notification (e.g. cut off by "clear buffer"): skip it
+    };
+    this._onGattDisconnected = () => this._onDisconnected();
+  }
+
+  /** Must be called directly from a click handler (browser requires a user gesture for the device picker). */
+  static request(name) {
+    return navigator.bluetooth.requestDevice({ filters: [{ name }], optionalServices: [NUS_SERVICE] });
+  }
+
+  async connect() {
+    this.state = 'connecting';
+    this._closed = false;
+    this.bt.addEventListener('gattserverdisconnected', this._onGattDisconnected);
+    const server = await this.bt.gatt.connect();
+    const service = await server.getPrimaryService(NUS_SERVICE);
+    this._rx = await service.getCharacteristic(NUS_RX);
+    this._tx = await service.getCharacteristic(NUS_TX);
+    this._tx.addEventListener('characteristicvaluechanged', this._onValue);
+    await this._tx.startNotifications();
+    this.state = 'connected';
+  }
+
+  async send(bytes) {
+    if (!this._rx) throw new Error('trying to send while not connected');
+    if (this._rx.properties.write) await this._rx.writeValueWithResponse(bytes);
+    else await this._rx.writeValueWithoutResponse(bytes);
+  }
+
+  async disconnect() {
+    try { this._tx && this._tx.removeEventListener('characteristicvaluechanged', this._onValue); } catch (e) { /* ignore */ }
+    this.bt.removeEventListener('gattserverdisconnected', this._onGattDisconnected);
+    if (this.bt.gatt.connected) this.bt.gatt.disconnect();
+    this._onDisconnected();
+  }
+}
+
+/** USB virtual serial port, usb.py UsbDevice */
+class UsbDevice extends AbstractDevice {
+  constructor(port) {
+    super();
+    this.port = port;
+    this._reader = null;
+    this._readLoop = null;
+  }
+
+  /** Must be called directly from a click handler. */
+  static request() { return navigator.serial.requestPort(); }
+
+  async connect() {
+    this._closed = false;
+    if (!this.port.readable) {
+      try { await this.port.open({ baudRate: 2147483647 }); }        // value used by the SDK
+      catch (e) { await this.port.open({ baudRate: 115200 }); }       // fallback; ignored by USB CDC devices
+    }
+    this.state = 'connected';
+    this._readLoop = (async () => {
+      try {
+        while (this.port.readable && !this._closed) {
+          this._reader = this.port.readable.getReader();
+          try {
+            for (;;) {
+              const { value, done } = await this._reader.read();
+              if (done) break;
+              if (value && value.length) {
+                try { this._feed(value, false); } catch (e) { /* reader re-synchronises; ignore */ }
+              }
+            }
+          } finally { this._reader.releaseLock(); this._reader = null; }
+        }
+      } catch (e) { /* device lost */ }
+      if (!this._closed) this._onDisconnected();
+    })();
+  }
+
+  async send(bytes) {
+    const w = this.port.writable.getWriter();
+    try { await w.write(bytes); } finally { w.releaseLock(); }
+  }
+
+  async disconnect() {
+    this._closed = true;
+    try { if (this._reader) await this._reader.cancel(); } catch (e) { /* ignore */ }
+    try { if (this._readLoop) await this._readLoop; } catch (e) { /* ignore */ }
+    try { await this.port.close(); } catch (e) { /* ignore */ }
+    this._onDisconnected();
+  }
+}
+
+/**
+ * Stream session = stream_sensor() of the teaching app.
+ * handle: {deviceName, chosen (BluetoothDevice | SerialPort), onItem(item), stop()}
+ * Items pushed to onItem: {kind:'status', text}, {kind:'error', error}, or a DataFullPacked package.
+ */
+class StreamSession {
+  constructor(deviceName, chosen, onItem) {
+    this.deviceName = deviceName;
+    this.chosen = chosen;
+    this.onItem = onItem;
+    this.stopRequested = false;
+    this.done = this._run();
+  }
+
+  /**
+   * One attempt = connect + start-up handshake + start streaming, with time limits. A failed or hanging attempt
+   * is closed and retried automatically (CONNECT_RETRIES attempts, RETRY_DELAY_S apart), so a sensor left in a
+   * bad state by an earlier session no longer needs a manual "Reconnect".
+   */
+  async _connectAndStart() {
+    let lastExc = null;
+    for (let attempt = 1; attempt <= CONNECT_RETRIES; attempt++) {
+      if (this.stopRequested) return null;
+      this.onItem({ kind: 'status', text: `🔄  Connecting… (attempt ${attempt}/${CONNECT_RETRIES})` });
+      const dev = this.deviceName === 'usb' ? new UsbDevice(this.chosen) : new BleDevice(this.chosen);
+      this.sensor = dev;
+      try {
+        await withTimeout(dev.connect(), CONNECT_TIMEOUT_S * 1000,
+          () => new Error(`Sensor '${this.deviceName}' not found within ${CONNECT_TIMEOUT_S.toFixed(0)} s`));
+        if (this.stopRequested) throw new Error('stopped');
+        this.onItem({ kind: 'status', text: '🔄  Initialising sensor…' });
+        await withTimeout((async () => {
+          await dev.init({ setTime: true });
+          await dev.send(C2G.cmd.setMeasurementMode({ fullPackedMode: C2G.SamplingMode.MODE_200HZ, statusMode: 1 }));
+          await dev.send(C2G.cmd.startStreaming());
+        })(), STARTUP_TIMEOUT_S * 1000,
+        () => new Error(`Sensor '${this.deviceName}' did not respond within ${STARTUP_TIMEOUT_S.toFixed(0)} s`));
+        return dev;
+      } catch (exc) {
+        lastExc = exc;
+        try { await withTimeout(dev.disconnect(), 3000, () => new Error('timeout')); } catch (e) { /* ignore */ }
+        this.sensor = null;
+      }
+      if (attempt < CONNECT_RETRIES) {
+        for (let i = 0; i < Math.floor(RETRY_DELAY_S / 0.25); i++) {
+          if (this.stopRequested) return null;
+          await sleep(250);
+        }
+      }
+    }
+    throw lastExc || new Error('Connection failed');
+  }
+
+  async _run() {
+    let sensor = null;
+    try {
+      sensor = await this._connectAndStart();
+      if (sensor === null) return;
+      let lastRx = performance.now();
+      let pending = null;
+      while (!this.stopRequested) {
+        if (pending === null) pending = sensor.nextPackage();
+        const res = await Promise.race([pending, sleep(300).then(() => null)]);
+        if (res === null) {
+          if (performance.now() - lastRx > DATA_TIMEOUT_S * 1000) {
+            throw new Error(`No data received from '${this.deviceName}' for ${DATA_TIMEOUT_S.toFixed(0)} s (connection lost?)`);
+          }
+          continue;
+        }
+        pending = null;
+        if (res.type === '__disconnected__') break;
+        if (res.type === '__error__') throw res.error;
+        lastRx = performance.now();
+        this.onItem(res);
+      }
+    } catch (exc) {
+      this.onItem({ kind: 'error', error: exc });
+    } finally {
+      if (sensor !== null) {
+        try { await withTimeout(sensor.send(C2G.cmd.stopStreaming()), 2000, () => new Error('timeout')); } catch (e) { /* ignore */ }
+        try { await sensor.disconnect(); } catch (e) { /* ignore */ }
+        await sleep(500);
+      }
+      this.sensor = null;
+    }
+  }
+
+  /** Best effort when the tab is closed or reloaded: stop the stream and drop the connection (cannot be awaited). */
+  abandon() {
+    this.stopRequested = true;
+    const dev = this.sensor;
+    if (!dev) return;
+    try { dev.send(C2G.cmd.stopStreaming()).catch(() => {}); } catch (e) { /* ignore */ }
+    try { if (dev.bt && dev.bt.gatt.connected) setTimeout(() => dev.bt.gatt.disconnect(), 0); } catch (e) { /* ignore */ }
+  }
+
+  /** _stop_stream(): request stop and wait (max timeout) until the sensor is released */
+  async stop(timeoutS = 6.0) {
+    this.stopRequested = true;
+    await Promise.race([this.done, sleep(timeoutS * 1000)]);
+  }
+}
+
+</script>
+<script>
+/* ---- js/box_mesh.js ---- */
+// generated by make_box_mesh.py: low-poly Capture2Go housing, 29 x 32 x 11 mm,
+// X = width, Y = length (cable slot on +Y), Z = up; origin at the box centre
+const BOX_MESH = {"verts": [[-13.0, -13.5, -5.5], [-12.951, -13.809, -5.5], [-12.809, -14.088, -5.5], [-12.588, -14.309, -5.5], [-12.309, -14.451, -5.5], [-12.0, -14.5, -5.5], [12.0, -14.5, -5.5], [12.309, -14.451, -5.5], [12.588, -14.309, -5.5], [12.809, -14.088, -5.5], [12.951, -13.809, -5.5], [13.0, -13.5, -5.5], [13.0, 10.085, -5.5], [12.979, 10.289, -5.5], [12.916, 10.485, -5.5], [12.815, 10.664, -5.5], [12.679, 10.819, -5.5], [12.514, 10.942, -5.5], [6.822, 14.357, -5.5], [6.727, 14.408, -5.5], [6.626, 14.448, -5.5], [6.522, 14.477, -5.5], [6.415, 14.494, -5.5], [6.308, 14.5, -5.5], [-6.308, 14.5, -5.5], [-6.415, 14.494, -5.5], [-6.522, 14.477, -5.5], [-6.626, 14.448, -5.5], [-6.727, 14.408, -5.5], [-6.822, 14.357, -5.5], [-12.514, 10.942, -5.5], [-12.679, 10.819, -5.5], [-12.815, 10.664, -5.5], [-12.916, 10.485, -5.5], [-12.979, 10.289, -5.5], [-13.0, 10.085, -5.5], [-13.75, -13.5, -5.299], [-13.664, -14.041, -5.299], [-13.416, -14.529, -5.299], [-13.029, -14.916, -5.299], [-12.541, -15.164, -5.299], [-12.0, -15.25, -5.299], [12.0, -15.25, -5.299], [12.541, -15.164, -5.299], [13.029, -14.916, -5.299], [13.416, -14.529, -5.299], [13.664, -14.041, -5.299], [13.75, -13.5, -5.299], [13.75, 10.085, -5.299], [13.713, 10.443, -5.299], [13.603, 10.786, -5.299], [13.426, 11.099, -5.299], [13.188, 11.369, -5.299], [12.9, 11.585, -5.299], [7.208, 15.001, -5.299], [7.041, 15.089, -5.299], [6.865, 15.159, -5.299], [6.683, 15.209, -5.299], [6.496, 15.24, -5.299], [6.308, 15.25, -5.299], [-6.308, 15.25, -5.299], [-6.496, 15.24, -5.299], [-6.683, 15.209, -5.299], [-6.865, 15.159, -5.299], [-7.041, 15.089, -5.299], [-7.208, 15.001, -5.299], [-12.9, 11.585, -5.299], [-13.188, 11.369, -5.299], [-13.426, 11.099, -5.299], [-13.603, 10.786, -5.299], [-13.713, 10.443, -5.299], [-13.75, 10.085, -5.299], [-14.299, -13.5, -4.75], [-14.187, -14.21, -4.75], [-13.86, -14.851, -4.75], [-13.351, -15.36, -4.75], [-12.71, -15.687, -4.75], [-12.0, -15.799, -4.75], [12.0, -15.799, -4.75], [12.71, -15.687, -4.75], [13.351, -15.36, -4.75], [13.86, -14.851, -4.75], [14.187, -14.21, -4.75], [14.299, -13.5, -4.75], [14.299, 10.085, -4.75], [14.25, 10.555, -4.75], [14.107, 11.005, -4.75], [13.874, 11.417, -4.75], [13.561, 11.772, -4.75], [13.183, 12.056, -4.75], [7.49, 15.471, -4.75], [7.271, 15.588, -4.75], [7.04, 15.679, -4.75], [6.801, 15.746, -4.75], [6.556, 15.786, -4.75], [6.308, 15.799, -4.75], [-6.308, 15.799, -4.75], [-6.556, 15.786, -4.75], [-6.801, 15.746, -4.75], [-7.04, 15.679, -4.75], [-7.271, 15.588, -4.75], [-7.49, 15.471, -4.75], [-13.183, 12.056, -4.75], [-13.561, 11.772, -4.75], [-13.874, 11.417, -4.75], [-14.107, 11.005, -4.75], [-14.25, 10.555, -4.75], [-14.299, 10.085, -4.75], [-14.5, -13.5, -4.0], [-14.378, -14.273, -4.0], [-14.023, -14.969, -4.0], [-13.469, -15.523, -4.0], [-12.773, -15.878, -4.0], [-12.0, -16.0, -4.0], [12.0, -16.0, -4.0], [12.773, -15.878, -4.0], [13.469, -15.523, -4.0], [14.023, -14.969, -4.0], [14.378, -14.273, -4.0], [14.5, -13.5, -4.0], [14.5, 10.085, -4.0], [14.447, 10.596, -4.0], [14.291, 11.086, -4.0], [14.037, 11.534, -4.0], [13.698, 11.92, -4.0], [13.286, 12.228, -4.0], [7.594, 15.644, -4.0], [7.355, 15.77, -4.0], [7.104, 15.87, -4.0], [6.844, 15.942, -4.0], [6.577, 15.985, -4.0], [6.308, 16.0, -4.0], [-6.308, 16.0, -4.0], [-6.577, 15.985, -4.0], [-6.844, 15.942, -4.0], [-7.104, 15.87, -4.0], [-7.355, 15.77, -4.0], [-7.594, 15.644, -4.0], [-13.286, 12.228, -4.0], [-13.698, 11.92, -4.0], [-14.037, 11.534, -4.0], [-14.291, 11.086, -4.0], [-14.447, 10.596, -4.0], [-14.5, 10.085, -4.0], [-14.5, -13.5, -1.0], [-14.378, -14.273, -1.0], [-14.023, -14.969, -1.0], [-13.469, -15.523, -1.0], [-12.773, -15.878, -1.0], [-12.0, -16.0, -1.0], [12.0, -16.0, -1.0], [12.773, -15.878, -1.0], [13.469, -15.523, -1.0], [14.023, -14.969, -1.0], [14.378, -14.273, -1.0], [14.5, -13.5, -1.0], [14.5, 10.085, -1.0], [14.447, 10.596, -1.0], [14.291, 11.086, -1.0], [14.037, 11.534, -1.0], [13.698, 11.92, -1.0], [13.286, 12.228, -1.0], [7.594, 15.644, -1.0], [7.355, 15.77, -1.0], [7.104, 15.87, -1.0], [6.844, 15.942, -1.0], [6.577, 15.985, -1.0], [6.308, 16.0, -1.0], [-6.308, 16.0, -1.0], [-6.577, 15.985, -1.0], [-6.844, 15.942, -1.0], [-7.104, 15.87, -1.0], [-7.355, 15.77, -1.0], [-7.594, 15.644, -1.0], [-13.286, 12.228, -1.0], [-13.698, 11.92, -1.0], [-14.037, 11.534, -1.0], [-14.291, 11.086, -1.0], [-14.447, 10.596, -1.0], [-14.5, 10.085, -1.0], [-14.5, -13.5, -1.0], [-14.378, -14.273, -1.0], [-14.023, -14.969, -1.0], [-13.469, -15.523, -1.0], [-12.773, -15.878, -1.0], [-12.0, -16.0, -1.0], [12.0, -16.0, -1.0], [12.773, -15.878, -1.0], [13.469, -15.523, -1.0], [14.023, -14.969, -1.0], [14.378, -14.273, -1.0], [14.5, -13.5, -1.0], [14.5, 10.085, -1.0], [14.447, 10.596, -1.0], [14.291, 11.086, -1.0], [14.037, 11.534, -1.0], [13.698, 11.92, -1.0], [13.286, 12.228, -1.0], [7.594, 15.644, -1.0], [7.355, 15.77, -1.0], [7.104, 15.87, -1.0], [6.844, 15.942, -1.0], [6.577, 15.985, -1.0], [6.308, 16.0, -1.0], [-6.308, 16.0, -1.0], [-6.577, 15.985, -1.0], [-6.844, 15.942, -1.0], [-7.104, 15.87, -1.0], [-7.355, 15.77, -1.0], [-7.594, 15.644, -1.0], [-13.286, 12.228, -1.0], [-13.698, 11.92, -1.0], [-14.037, 11.534, -1.0], [-14.291, 11.086, -1.0], [-14.447, 10.596, -1.0], [-14.5, 10.085, -1.0], [-14.5, -13.5, 2.0], [-14.378, -14.273, 2.0], [-14.023, -14.969, 2.0], [-13.469, -15.523, 2.0], [-12.773, -15.878, 2.0], [-12.0, -16.0, 2.0], [12.0, -16.0, 2.0], [12.773, -15.878, 2.0], [13.469, -15.523, 2.0], [14.023, -14.969, 2.0], [14.378, -14.273, 2.0], [14.5, -13.5, 2.0], [14.5, 10.085, 2.0], [14.447, 10.596, 2.0], [14.291, 11.086, 2.0], [14.037, 11.534, 2.0], [13.698, 11.92, 2.0], [13.286, 12.228, 2.0], [7.594, 15.644, 2.0], [7.355, 15.77, 2.0], [7.104, 15.87, 2.0], [6.844, 15.942, 2.0], [6.577, 15.985, 2.0], [6.308, 16.0, 2.0], [-6.308, 16.0, 2.0], [-6.577, 15.985, 2.0], [-6.844, 15.942, 2.0], [-7.104, 15.87, 2.0], [-7.355, 15.77, 2.0], [-7.594, 15.644, 2.0], [-13.286, 12.228, 2.0], [-13.698, 11.92, 2.0], [-14.037, 11.534, 2.0], [-14.291, 11.086, 2.0], [-14.447, 10.596, 2.0], [-14.5, 10.085, 2.0], [-14.329, -13.5, 3.082], [-14.215, -14.22, 3.082], [-13.884, -14.869, 3.082], [-13.369, -15.384, 3.082], [-12.72, -15.715, 3.082], [-12.0, -15.829, 3.082], [12.0, -15.829, 3.082], [12.72, -15.715, 3.082], [13.369, -15.384, 3.082], [13.884, -14.869, 3.082], [14.215, -14.22, 3.082], [14.329, -13.5, 3.082], [14.329, 10.085, 3.082], [14.279, 10.561, 3.082], [14.134, 11.017, 3.082], [13.898, 11.434, 3.082], [13.581, 11.794, 3.082], [13.198, 12.081, 3.082], [7.506, 15.497, 3.082], [7.283, 15.614, 3.082], [7.049, 15.707, 3.082], [6.807, 15.775, 3.082], [6.559, 15.815, 3.082], [6.308, 15.829, 3.082], [-6.308, 15.829, 3.082], [-6.559, 15.815, 3.082], [-6.807, 15.775, 3.082], [-7.049, 15.707, 3.082], [-7.283, 15.614, 3.082], [-7.506, 15.497, 3.082], [-13.198, 12.081, 3.082], [-13.581, 11.794, 3.082], [-13.898, 11.434, 3.082], [-14.134, 11.017, 3.082], [-14.279, 10.561, 3.082], [-14.329, 10.085, 3.082], [-13.832, -13.5, 4.057], [-13.742, -14.066, 4.057], [-13.482, -14.577, 4.057], [-13.077, -14.982, 4.057], [-12.566, -15.242, 4.057], [-12.0, -15.332, 4.057], [12.0, -15.332, 4.057], [12.566, -15.242, 4.057], [13.077, -14.982, 4.057], [13.482, -14.577, 4.057], [13.742, -14.066, 4.057], [13.832, -13.5, 4.057], [13.832, 10.085, 4.057], [13.793, 10.459, 4.057], [13.678, 10.818, 4.057], [13.493, 11.146, 4.057], [13.244, 11.429, 4.057], [12.942, 11.655, 4.057], [7.25, 15.071, 4.057], [7.075, 15.163, 4.057], [6.891, 15.236, 4.057], [6.7, 15.289, 4.057], [6.505, 15.321, 4.057], [6.308, 15.332, 4.057], [-6.308, 15.332, 4.057], [-6.505, 15.321, 4.057], [-6.7, 15.289, 4.057], [-6.891, 15.236, 4.057], [-7.075, 15.163, 4.057], [-7.25, 15.071, 4.057], [-12.942, 11.655, 4.057], [-13.244, 11.429, 4.057], [-13.493, 11.146, 4.057], [-13.678, 10.818, 4.057], [-13.793, 10.459, 4.057], [-13.832, 10.085, 4.057], [-13.057, -13.5, 4.832], [-13.006, -13.827, 4.832], [-12.855, -14.121, 4.832], [-12.621, -14.355, 4.832], [-12.327, -14.506, 4.832], [-12.0, -14.557, 4.832], [12.0, -14.557, 4.832], [12.327, -14.506, 4.832], [12.621, -14.355, 4.832], [12.855, -14.121, 4.832], [13.006, -13.827, 4.832], [13.057, -13.5, 4.832], [13.057, 10.085, 4.832], [13.035, 10.301, 4.832], [12.969, 10.508, 4.832], [12.862, 10.697, 4.832], [12.718, 10.861, 4.832], [12.544, 10.991, 4.832], [6.851, 14.407, 4.832], [6.751, 14.46, 4.832], [6.644, 14.502, 4.832], [6.534, 14.533, 4.832], [6.422, 14.551, 4.832], [6.308, 14.557, 4.832], [-6.308, 14.557, 4.832], [-6.422, 14.551, 4.832], [-6.534, 14.533, 4.832], [-6.644, 14.502, 4.832], [-6.751, 14.46, 4.832], [-6.851, 14.407, 4.832], [-12.544, 10.991, 4.832], [-12.718, 10.861, 4.832], [-12.862, 10.697, 4.832], [-12.969, 10.508, 4.832], [-13.035, 10.301, 4.832], [-13.057, 10.085, 4.832], [-12.082, -13.282, 5.329], [-12.067, -13.374, 5.329], [-12.024, -13.458, 5.329], [-11.958, -13.524, 5.329], [-11.874, -13.567, 5.329], [-11.782, -13.582, 5.329], [11.782, -13.582, 5.329], [11.874, -13.567, 5.329], [11.958, -13.524, 5.329], [12.024, -13.458, 5.329], [12.067, -13.374, 5.329], [12.082, -13.282, 5.329], [12.082, 9.961, 5.329], [12.075, 10.022, 5.329], [12.056, 10.081, 5.329], [12.026, 10.135, 5.329], [11.985, 10.181, 5.329], [11.936, 10.218, 5.329], [6.401, 13.539, 5.329], [6.373, 13.554, 5.329], [6.343, 13.566, 5.329], [6.311, 13.575, 5.329], [6.279, 13.58, 5.329], [6.247, 13.582, 5.329], [-6.247, 13.582, 5.329], [-6.279, 13.58, 5.329], [-6.311, 13.575, 5.329], [-6.343, 13.566, 5.329], [-6.373, 13.554, 5.329], [-6.401, 13.539, 5.329], [-11.936, 10.218, 5.329], [-11.985, 10.181, 5.329], [-12.026, 10.135, 5.329], [-12.056, 10.081, 5.329], [-12.075, 10.022, 5.329], [-12.082, 9.961, 5.329], [-11.0, -12.2, 5.5], [-10.985, -12.293, 5.5], [-10.943, -12.376, 5.5], [-10.876, -12.443, 5.5], [-10.793, -12.485, 5.5], [-10.7, -12.5, 5.5], [10.7, -12.5, 5.5], [10.793, -12.485, 5.5], [10.876, -12.443, 5.5], [10.943, -12.376, 5.5], [10.985, -12.293, 5.5], [11.0, -12.2, 5.5], [11.0, 9.348, 5.5], [10.994, 9.41, 5.5], [10.975, 9.469, 5.5], [10.944, 9.522, 5.5], [10.904, 9.569, 5.5], [10.854, 9.606, 5.5], [6.102, 12.457, 5.5], [6.073, 12.472, 5.5], [6.043, 12.484, 5.5], [6.012, 12.493, 5.5], [5.98, 12.498, 5.5], [5.947, 12.5, 5.5], [-5.947, 12.5, 5.5], [-5.98, 12.498, 5.5], [-6.012, 12.493, 5.5], [-6.043, 12.484, 5.5], [-6.073, 12.472, 5.5], [-6.102, 12.457, 5.5], [-10.854, 9.606, 5.5], [-10.904, 9.569, 5.5], [-10.944, 9.522, 5.5], [-10.975, 9.469, 5.5], [-10.994, 9.41, 5.5], [-11.0, 9.348, 5.5], [0.0, 0.0, -5.5], [0.0, 0.0, 5.5]], "tris": [[0, 1, 37, 0], [0, 37, 36, 0], [1, 2, 38, 0], [1, 38, 37, 0], [2, 3, 39, 0], [2, 39, 38, 0], [3, 4, 40, 0], [3, 40, 39, 0], [4, 5, 41, 0], [4, 41, 40, 0], [5, 6, 42, 0], [5, 42, 41, 0], [6, 7, 43, 0], [6, 43, 42, 0], [7, 8, 44, 0], [7, 44, 43, 0], [8, 9, 45, 0], [8, 45, 44, 0], [9, 10, 46, 0], [9, 46, 45, 0], [10, 11, 47, 0], [10, 47, 46, 0], [11, 12, 48, 0], [11, 48, 47, 0], [12, 13, 49, 0], [12, 49, 48, 0], [13, 14, 50, 0], [13, 50, 49, 0], [14, 15, 51, 0], [14, 51, 50, 0], [15, 16, 52, 0], [15, 52, 51, 0], [16, 17, 53, 0], [16, 53, 52, 0], [17, 18, 54, 0], [17, 54, 53, 0], [18, 19, 55, 0], [18, 55, 54, 0], [19, 20, 56, 0], [19, 56, 55, 0], [20, 21, 57, 0], [20, 57, 56, 0], [21, 22, 58, 0], [21, 58, 57, 0], [22, 23, 59, 0], [22, 59, 58, 0], [23, 24, 60, 0], [23, 60, 59, 0], [24, 25, 61, 0], [24, 61, 60, 0], [25, 26, 62, 0], [25, 62, 61, 0], [26, 27, 63, 0], [26, 63, 62, 0], [27, 28, 64, 0], [27, 64, 63, 0], [28, 29, 65, 0], [28, 65, 64, 0], [29, 30, 66, 0], [29, 66, 65, 0], [30, 31, 67, 0], [30, 67, 66, 0], [31, 32, 68, 0], [31, 68, 67, 0], [32, 33, 69, 0], [32, 69, 68, 0], [33, 34, 70, 0], [33, 70, 69, 0], [34, 35, 71, 0], [34, 71, 70, 0], [35, 0, 36, 0], [35, 36, 71, 0], [36, 37, 73, 0], [36, 73, 72, 0], [37, 38, 74, 0], [37, 74, 73, 0], [38, 39, 75, 0], [38, 75, 74, 0], [39, 40, 76, 0], [39, 76, 75, 0], [40, 41, 77, 0], [40, 77, 76, 0], [41, 42, 78, 0], [41, 78, 77, 0], [42, 43, 79, 0], [42, 79, 78, 0], [43, 44, 80, 0], [43, 80, 79, 0], [44, 45, 81, 0], [44, 81, 80, 0], [45, 46, 82, 0], [45, 82, 81, 0], [46, 47, 83, 0], [46, 83, 82, 0], [47, 48, 84, 0], [47, 84, 83, 0], [48, 49, 85, 0], [48, 85, 84, 0], [49, 50, 86, 0], [49, 86, 85, 0], [50, 51, 87, 0], [50, 87, 86, 0], [51, 52, 88, 0], [51, 88, 87, 0], [52, 53, 89, 0], [52, 89, 88, 0], [53, 54, 90, 0], [53, 90, 89, 0], [54, 55, 91, 0], [54, 91, 90, 0], [55, 56, 92, 0], [55, 92, 91, 0], [56, 57, 93, 0], [56, 93, 92, 0], [57, 58, 94, 0], [57, 94, 93, 0], [58, 59, 95, 0], [58, 95, 94, 0], [59, 60, 96, 0], [59, 96, 95, 0], [60, 61, 97, 0], [60, 97, 96, 0], [61, 62, 98, 0], [61, 98, 97, 0], [62, 63, 99, 0], [62, 99, 98, 0], [63, 64, 100, 0], [63, 100, 99, 0], [64, 65, 101, 0], [64, 101, 100, 0], [65, 66, 102, 0], [65, 102, 101, 0], [66, 67, 103, 0], [66, 103, 102, 0], [67, 68, 104, 0], [67, 104, 103, 0], [68, 69, 105, 0], [68, 105, 104, 0], [69, 70, 106, 0], [69, 106, 105, 0], [70, 71, 107, 0], [70, 107, 106, 0], [71, 36, 72, 0], [71, 72, 107, 0], [72, 73, 109, 0], [72, 109, 108, 0], [73, 74, 110, 0], [73, 110, 109, 0], [74, 75, 111, 0], [74, 111, 110, 0], [75, 76, 112, 0], [75, 112, 111, 0], [76, 77, 113, 0], [76, 113, 112, 0], [77, 78, 114, 0], [77, 114, 113, 0], [78, 79, 115, 0], [78, 115, 114, 0], [79, 80, 116, 0], [79, 116, 115, 0], [80, 81, 117, 0], [80, 117, 116, 0], [81, 82, 118, 0], [81, 118, 117, 0], [82, 83, 119, 0], [82, 119, 118, 0], [83, 84, 120, 0], [83, 120, 119, 0], [84, 85, 121, 0], [84, 121, 120, 0], [85, 86, 122, 0], [85, 122, 121, 0], [86, 87, 123, 0], [86, 123, 122, 0], [87, 88, 124, 0], [87, 124, 123, 0], [88, 89, 125, 0], [88, 125, 124, 0], [89, 90, 126, 0], [89, 126, 125, 0], [90, 91, 127, 0], [90, 127, 126, 0], [91, 92, 128, 0], [91, 128, 127, 0], [92, 93, 129, 0], [92, 129, 128, 0], [93, 94, 130, 0], [93, 130, 129, 0], [94, 95, 131, 0], [94, 131, 130, 0], [95, 96, 132, 0], [95, 132, 131, 0], [96, 97, 133, 0], [96, 133, 132, 0], [97, 98, 134, 0], [97, 134, 133, 0], [98, 99, 135, 0], [98, 135, 134, 0], [99, 100, 136, 0], [99, 136, 135, 0], [100, 101, 137, 0], [100, 137, 136, 0], [101, 102, 138, 0], [101, 138, 137, 0], [102, 103, 139, 0], [102, 139, 138, 0], [103, 104, 140, 0], [103, 140, 139, 0], [104, 105, 141, 0], [104, 141, 140, 0], [105, 106, 142, 0], [105, 142, 141, 0], [106, 107, 143, 0], [106, 143, 142, 0], [107, 72, 108, 0], [107, 108, 143, 0], [108, 109, 145, 0], [108, 145, 144, 0], [109, 110, 146, 0], [109, 146, 145, 0], [110, 111, 147, 0], [110, 147, 146, 0], [111, 112, 148, 0], [111, 148, 147, 0], [112, 113, 149, 0], [112, 149, 148, 0], [113, 114, 150, 0], [113, 150, 149, 0], [114, 115, 151, 0], [114, 151, 150, 0], [115, 116, 152, 0], [115, 152, 151, 0], [116, 117, 153, 0], [116, 153, 152, 0], [117, 118, 154, 0], [117, 154, 153, 0], [118, 119, 155, 0], [118, 155, 154, 0], [119, 120, 156, 0], [119, 156, 155, 0], [120, 121, 157, 0], [120, 157, 156, 0], [121, 122, 158, 0], [121, 158, 157, 0], [122, 123, 159, 0], [122, 159, 158, 0], [123, 124, 160, 0], [123, 160, 159, 0], [124, 125, 161, 0], [124, 161, 160, 0], [125, 126, 162, 0], [125, 162, 161, 0], [126, 127, 163, 0], [126, 163, 162, 0], [127, 128, 164, 0], [127, 164, 163, 0], [128, 129, 165, 0], [128, 165, 164, 0], [129, 130, 166, 0], [129, 166, 165, 0], [130, 131, 167, 0], [130, 167, 166, 0], [131, 132, 168, 0], [131, 168, 167, 0], [132, 133, 169, 0], [132, 169, 168, 0], [133, 134, 170, 0], [133, 170, 169, 0], [134, 135, 171, 0], [134, 171, 170, 0], [135, 136, 172, 0], [135, 172, 171, 0], [136, 137, 173, 0], [136, 173, 172, 0], [137, 138, 174, 0], [137, 174, 173, 0], [138, 139, 175, 0], [138, 175, 174, 0], [139, 140, 176, 0], [139, 176, 175, 0], [140, 141, 177, 0], [140, 177, 176, 0], [141, 142, 178, 0], [141, 178, 177, 0], [142, 143, 179, 0], [142, 179, 178, 0], [143, 108, 144, 0], [143, 144, 179, 0], [180, 181, 217, 1], [180, 217, 216, 1], [181, 182, 218, 1], [181, 218, 217, 1], [182, 183, 219, 1], [182, 219, 218, 1], [183, 184, 220, 1], [183, 220, 219, 1], [184, 185, 221, 1], [184, 221, 220, 1], [185, 186, 222, 1], [185, 222, 221, 1], [186, 187, 223, 1], [186, 223, 222, 1], [187, 188, 224, 1], [187, 224, 223, 1], [188, 189, 225, 1], [188, 225, 224, 1], [189, 190, 226, 1], [189, 226, 225, 1], [190, 191, 227, 1], [190, 227, 226, 1], [191, 192, 228, 1], [191, 228, 227, 1], [192, 193, 229, 1], [192, 229, 228, 1], [193, 194, 230, 1], [193, 230, 229, 1], [194, 195, 231, 1], [194, 231, 230, 1], [195, 196, 232, 1], [195, 232, 231, 1], [196, 197, 233, 1], [196, 233, 232, 1], [197, 198, 234, 1], [197, 234, 233, 1], [198, 199, 235, 1], [198, 235, 234, 1], [199, 200, 236, 1], [199, 236, 235, 1], [200, 201, 237, 1], [200, 237, 236, 1], [201, 202, 238, 1], [201, 238, 237, 1], [202, 203, 239, 1], [202, 239, 238, 1], [203, 204, 240, 1], [203, 240, 239, 1], [204, 205, 241, 1], [204, 241, 240, 1], [205, 206, 242, 1], [205, 242, 241, 1], [206, 207, 243, 1], [206, 243, 242, 1], [207, 208, 244, 1], [207, 244, 243, 1], [208, 209, 245, 1], [208, 245, 244, 1], [209, 210, 246, 1], [209, 246, 245, 1], [210, 211, 247, 1], [210, 247, 246, 1], [211, 212, 248, 1], [211, 248, 247, 1], [212, 213, 249, 1], [212, 249, 248, 1], [213, 214, 250, 1], [213, 250, 249, 1], [214, 215, 251, 1], [214, 251, 250, 1], [215, 180, 216, 1], [215, 216, 251, 1], [216, 217, 253, 1], [216, 253, 252, 1], [217, 218, 254, 1], [217, 254, 253, 1], [218, 219, 255, 1], [218, 255, 254, 1], [219, 220, 256, 1], [219, 256, 255, 1], [220, 221, 257, 1], [220, 257, 256, 1], [221, 222, 258, 1], [221, 258, 257, 1], [222, 223, 259, 1], [222, 259, 258, 1], [223, 224, 260, 1], [223, 260, 259, 1], [224, 225, 261, 1], [224, 261, 260, 1], [225, 226, 262, 1], [225, 262, 261, 1], [226, 227, 263, 1], [226, 263, 262, 1], [227, 228, 264, 1], [227, 264, 263, 1], [228, 229, 265, 1], [228, 265, 264, 1], [229, 230, 266, 1], [229, 266, 265, 1], [230, 231, 267, 1], [230, 267, 266, 1], [231, 232, 268, 1], [231, 268, 267, 1], [232, 233, 269, 1], [232, 269, 268, 1], [233, 234, 270, 1], [233, 270, 269, 1], [234, 235, 271, 1], [234, 271, 270, 1], [235, 236, 272, 1], [235, 272, 271, 1], [236, 237, 273, 1], [236, 273, 272, 1], [237, 238, 274, 1], [237, 274, 273, 1], [238, 239, 275, 1], [238, 275, 274, 1], [239, 240, 276, 1], [239, 276, 275, 1], [240, 241, 277, 1], [240, 277, 276, 1], [241, 242, 278, 1], [241, 278, 277, 1], [242, 243, 279, 1], [242, 279, 278, 1], [243, 244, 280, 1], [243, 280, 279, 1], [244, 245, 281, 1], [244, 281, 280, 1], [245, 246, 282, 1], [245, 282, 281, 1], [246, 247, 283, 1], [246, 283, 282, 1], [247, 248, 284, 1], [247, 284, 283, 1], [248, 249, 285, 1], [248, 285, 284, 1], [249, 250, 286, 1], [249, 286, 285, 1], [250, 251, 287, 1], [250, 287, 286, 1], [251, 216, 252, 1], [251, 252, 287, 1], [252, 253, 289, 1], [252, 289, 288, 1], [253, 254, 290, 1], [253, 290, 289, 1], [254, 255, 291, 1], [254, 291, 290, 1], [255, 256, 292, 1], [255, 292, 291, 1], [256, 257, 293, 1], [256, 293, 292, 1], [257, 258, 294, 1], [257, 294, 293, 1], [258, 259, 295, 1], [258, 295, 294, 1], [259, 260, 296, 1], [259, 296, 295, 1], [260, 261, 297, 1], [260, 297, 296, 1], [261, 262, 298, 1], [261, 298, 297, 1], [262, 263, 299, 1], [262, 299, 298, 1], [263, 264, 300, 1], [263, 300, 299, 1], [264, 265, 301, 1], [264, 301, 300, 1], [265, 266, 302, 1], [265, 302, 301, 1], [266, 267, 303, 1], [266, 303, 302, 1], [267, 268, 304, 1], [267, 304, 303, 1], [268, 269, 305, 1], [268, 305, 304, 1], [269, 270, 306, 1], [269, 306, 305, 1], [270, 271, 307, 1], [270, 307, 306, 1], [271, 272, 308, 1], [271, 308, 307, 1], [272, 273, 309, 1], [272, 309, 308, 1], [273, 274, 310, 1], [273, 310, 309, 1], [274, 275, 311, 1], [274, 311, 310, 1], [275, 276, 312, 1], [275, 312, 311, 1], [276, 277, 313, 1], [276, 313, 312, 1], [277, 278, 314, 1], [277, 314, 313, 1], [278, 279, 315, 1], [278, 315, 314, 1], [279, 280, 316, 1], [279, 316, 315, 1], [280, 281, 317, 1], [280, 317, 316, 1], [281, 282, 318, 1], [281, 318, 317, 1], [282, 283, 319, 1], [282, 319, 318, 1], [283, 284, 320, 1], [283, 320, 319, 1], [284, 285, 321, 1], [284, 321, 320, 1], [285, 286, 322, 1], [285, 322, 321, 1], [286, 287, 323, 1], [286, 323, 322, 1], [287, 252, 288, 1], [287, 288, 323, 1], [288, 289, 325, 1], [288, 325, 324, 1], [289, 290, 326, 1], [289, 326, 325, 1], [290, 291, 327, 1], [290, 327, 326, 1], [291, 292, 328, 1], [291, 328, 327, 1], [292, 293, 329, 1], [292, 329, 328, 1], [293, 294, 330, 1], [293, 330, 329, 1], [294, 295, 331, 1], [294, 331, 330, 1], [295, 296, 332, 1], [295, 332, 331, 1], [296, 297, 333, 1], [296, 333, 332, 1], [297, 298, 334, 1], [297, 334, 333, 1], [298, 299, 335, 1], [298, 335, 334, 1], [299, 300, 336, 1], [299, 336, 335, 1], [300, 301, 337, 1], [300, 337, 336, 1], [301, 302, 338, 1], [301, 338, 337, 1], [302, 303, 339, 1], [302, 339, 338, 1], [303, 304, 340, 1], [303, 340, 339, 1], [304, 305, 341, 1], [304, 341, 340, 1], [305, 306, 342, 1], [305, 342, 341, 1], [306, 307, 343, 1], [306, 343, 342, 1], [307, 308, 344, 1], [307, 344, 343, 1], [308, 309, 345, 1], [308, 345, 344, 1], [309, 310, 346, 1], [309, 346, 345, 1], [310, 311, 347, 1], [310, 347, 346, 1], [311, 312, 348, 1], [311, 348, 347, 1], [312, 313, 349, 1], [312, 349, 348, 1], [313, 314, 350, 1], [313, 350, 349, 1], [314, 315, 351, 1], [314, 351, 350, 1], [315, 316, 352, 1], [315, 352, 351, 1], [316, 317, 353, 1], [316, 353, 352, 1], [317, 318, 354, 1], [317, 354, 353, 1], [318, 319, 355, 1], [318, 355, 354, 1], [319, 320, 356, 1], [319, 356, 355, 1], [320, 321, 357, 1], [320, 357, 356, 1], [321, 322, 358, 1], [321, 358, 357, 1], [322, 323, 359, 1], [322, 359, 358, 1], [323, 288, 324, 1], [323, 324, 359, 1], [324, 325, 361, 1], [324, 361, 360, 1], [325, 326, 362, 1], [325, 362, 361, 1], [326, 327, 363, 1], [326, 363, 362, 1], [327, 328, 364, 1], [327, 364, 363, 1], [328, 329, 365, 1], [328, 365, 364, 1], [329, 330, 366, 1], [329, 366, 365, 1], [330, 331, 367, 1], [330, 367, 366, 1], [331, 332, 368, 1], [331, 368, 367, 1], [332, 333, 369, 1], [332, 369, 368, 1], [333, 334, 370, 1], [333, 370, 369, 1], [334, 335, 371, 1], [334, 371, 370, 1], [335, 336, 372, 1], [335, 372, 371, 1], [336, 337, 373, 1], [336, 373, 372, 1], [337, 338, 374, 1], [337, 374, 373, 1], [338, 339, 375, 1], [338, 375, 374, 1], [339, 340, 376, 1], [339, 376, 375, 1], [340, 341, 377, 1], [340, 377, 376, 1], [341, 342, 378, 1], [341, 378, 377, 1], [342, 343, 379, 1], [342, 379, 378, 1], [343, 344, 380, 1], [343, 380, 379, 1], [344, 345, 381, 1], [344, 381, 380, 1], [345, 346, 382, 1], [345, 382, 381, 1], [346, 347, 383, 1], [346, 383, 382, 1], [347, 348, 384, 1], [347, 384, 383, 1], [348, 349, 385, 1], [348, 385, 384, 1], [349, 350, 386, 1], [349, 386, 385, 1], [350, 351, 387, 1], [350, 387, 386, 1], [351, 352, 388, 1], [351, 388, 387, 1], [352, 353, 389, 1], [352, 389, 388, 1], [353, 354, 390, 1], [353, 390, 389, 1], [354, 355, 391, 1], [354, 391, 390, 1], [355, 356, 392, 1], [355, 392, 391, 1], [356, 357, 393, 1], [356, 393, 392, 1], [357, 358, 394, 1], [357, 394, 393, 1], [358, 359, 395, 1], [358, 395, 394, 1], [359, 324, 360, 1], [359, 360, 395, 1], [360, 361, 397, 1], [360, 397, 396, 1], [361, 362, 398, 1], [361, 398, 397, 1], [362, 363, 399, 1], [362, 399, 398, 1], [363, 364, 400, 1], [363, 400, 399, 1], [364, 365, 401, 1], [364, 401, 400, 1], [365, 366, 402, 1], [365, 402, 401, 1], [366, 367, 403, 1], [366, 403, 402, 1], [367, 368, 404, 1], [367, 404, 403, 1], [368, 369, 405, 1], [368, 405, 404, 1], [369, 370, 406, 1], [369, 406, 405, 1], [370, 371, 407, 1], [370, 407, 406, 1], [371, 372, 408, 1], [371, 408, 407, 1], [372, 373, 409, 1], [372, 409, 408, 1], [373, 374, 410, 1], [373, 410, 409, 1], [374, 375, 411, 1], [374, 411, 410, 1], [375, 376, 412, 1], [375, 412, 411, 1], [376, 377, 413, 1], [376, 413, 412, 1], [377, 378, 414, 1], [377, 414, 413, 1], [378, 379, 415, 1], [378, 415, 414, 1], [379, 380, 416, 1], [379, 416, 415, 1], [380, 381, 417, 1], [380, 417, 416, 1], [381, 382, 418, 1], [381, 418, 417, 1], [382, 383, 419, 1], [382, 419, 418, 1], [383, 384, 420, 1], [383, 420, 419, 1], [384, 385, 421, 1], [384, 421, 420, 1], [385, 386, 422, 1], [385, 422, 421, 1], [386, 387, 423, 1], [386, 423, 422, 1], [387, 388, 424, 1], [387, 424, 423, 1], [388, 389, 425, 1], [388, 425, 424, 1], [389, 390, 426, 1], [389, 426, 425, 1], [390, 391, 427, 1], [390, 427, 426, 1], [391, 392, 428, 1], [391, 428, 427, 1], [392, 393, 429, 1], [392, 429, 428, 1], [393, 394, 430, 1], [393, 430, 429, 1], [394, 395, 431, 1], [394, 431, 430, 1], [395, 360, 396, 1], [395, 396, 431, 1], [432, 1, 0, 0], [432, 2, 1, 0], [432, 3, 2, 0], [432, 4, 3, 0], [432, 5, 4, 0], [432, 6, 5, 0], [432, 7, 6, 0], [432, 8, 7, 0], [432, 9, 8, 0], [432, 10, 9, 0], [432, 11, 10, 0], [432, 12, 11, 0], [432, 13, 12, 0], [432, 14, 13, 0], [432, 15, 14, 0], [432, 16, 15, 0], [432, 17, 16, 0], [432, 18, 17, 0], [432, 19, 18, 0], [432, 20, 19, 0], [432, 21, 20, 0], [432, 22, 21, 0], [432, 23, 22, 0], [432, 24, 23, 0], [432, 25, 24, 0], [432, 26, 25, 0], [432, 27, 26, 0], [432, 28, 27, 0], [432, 29, 28, 0], [432, 30, 29, 0], [432, 31, 30, 0], [432, 32, 31, 0], [432, 33, 32, 0], [432, 34, 33, 0], [432, 35, 34, 0], [432, 0, 35, 0], [433, 396, 397, 1], [433, 397, 398, 1], [433, 398, 399, 1], [433, 399, 400, 1], [433, 400, 401, 1], [433, 401, 402, 1], [433, 402, 403, 1], [433, 403, 404, 1], [433, 404, 405, 1], [433, 405, 406, 1], [433, 406, 407, 1], [433, 407, 408, 1], [433, 408, 409, 1], [433, 409, 410, 1], [433, 410, 411, 1], [433, 411, 412, 1], [433, 412, 413, 1], [433, 413, 414, 1], [433, 414, 415, 1], [433, 415, 416, 1], [433, 416, 417, 1], [433, 417, 418, 1], [433, 418, 419, 1], [433, 419, 420, 1], [433, 420, 421, 1], [433, 421, 422, 1], [433, 422, 423, 1], [433, 423, 424, 1], [433, 424, 425, 1], [433, 425, 426, 1], [433, 426, 427, 1], [433, 427, 428, 1], [433, 428, 429, 1], [433, 429, 430, 1], [433, 430, 431, 1], [433, 431, 396, 1]], "colors": ["#1F3FA8", "#ECECEC"], "decals": [{"pts": [[0.6000000000000001, -3.3, 5.53], [0.5148145657226708, -2.652952387243698, 5.53], [0.2650635094610969, -2.05, 5.53], [-0.13223304703363103, -1.532233047033631, 5.53], [-0.6499999999999997, -1.1349364905389034, 5.53], [-1.2529523872436976, -0.8851854342773295, 5.53], [-1.8999999999999997, -0.7999999999999998, 5.53], [-2.5470476127563018, -0.8851854342773291, 5.53], [-3.1499999999999995, -1.134936490538903, 5.53], [-3.6677669529663683, -1.532233047033631, 5.53], [-4.065063509461096, -2.049999999999999, 5.53], [-4.314814565722671, -2.6529523872436975, 5.53], [-4.4, -3.2999999999999994, 5.53], [-4.314814565722671, -3.947047612756301, 5.53], [-4.065063509461098, -4.549999999999999, 5.53], [-3.6677669529663697, -5.067766952966368, 5.53], [-3.1500000000000012, -5.465063509461096, 5.53], [-2.5470476127563035, -5.71481456572267, 5.53], [-1.9000000000000004, -5.8, 5.53], [-1.2529523872436992, -5.714814565722671, 5.53], [-0.6500000000000017, -5.465063509461098, 5.53], [-0.13223304703363148, -5.06776695296637, 5.53], [0.265063509461096, -4.550000000000001, 5.53], [0.5148145657226704, -3.947047612756304, 5.53]], "color": "#D4D4D4", "normal": [0, 0, 1]}, {"pts": [[-0.6499999999999999, -3.3, 5.55], [-0.7451505843608914, -2.8216457095436374, 5.55], [-1.0161165235168155, -2.4161165235168154, 5.55], [-1.4216457095436377, -2.1451505843608913, 5.55], [-1.9, -2.05, 5.55], [-2.378354290456362, -2.1451505843608913, 5.55], [-2.7838834764831843, -2.4161165235168154, 5.55], [-3.0548494156391084, -2.8216457095436374, 5.55], [-3.15, -3.3, 5.55], [-3.0548494156391084, -3.778354290456362, 5.55], [-2.783883476483185, -4.183883476483184, 5.55], [-2.378354290456363, -4.454849415639108, 5.55], [-1.9000000000000001, -4.55, 5.55], [-1.4216457095436374, -4.454849415639108, 5.55], [-1.0161165235168157, -4.183883476483184, 5.55], [-0.7451505843608919, -3.7783542904563627, 5.55]], "color": "#2BD94A", "normal": [0, 0, 1]}, {"pts": [[-5.5, 16.05, -2.75], [5.5, 16.05, -2.75], [5.5, 16.05, 0.75], [-5.5, 16.05, 0.75]], "color": "#1A1A1A", "normal": [0, 1, 0]}]};
+
+</script>
+<script>
+/* ---- js/plots.js ---- */
+/*
+ * Live line plots (replaces the 2x2 matplotlib figure of the desktop app, _build_figure / _update_plot).
+ * Each plot shows a scrolling 4 s window (800 samples at 200 Hz) with three channels.
+ */
+'use strict';
+
+const MONO_CSS = 'Consolas, Menlo, "DejaVu Sans Mono", monospace';
+const UI_CSS = '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif';
+const PLOT_TITLE_SIZE_PX = 15;
+const PLOT_TICK_SIZE_PX = 11;
+const PLOT_LEGEND_SIZE_PX = 12;
+const PLOT_LABEL_SIZE_PX = 12;
+
+function niceStep(range, maxIntervals) {
+  const raw = range / maxIntervals;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * mag >= raw - 1e-12) return m * mag;
+  return 10 * mag;
+}
+
+class LinePlot {
+  /**
+   * @param canvas   target canvas
+   * @param opts     {title, ylim:[lo,hi], xlim:[lo,hi], colors:[3], legend:[names]|null, xlabel:string|null}
+   */
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.o = opts;
+    this.bg = null;     // cached static background
+    this.sizeKey = '';
+  }
+
+  _layout(w, h) {
+    const left = 50, right = 16, top = this.o.title ? 30 : 12, bottom = this.o.xlabel ? 44 : 26;
+    return { x0: left, y0: top, x1: w - right, y1: h - bottom };
+  }
+
+  _drawStatic(ctx, w, h) {
+    const o = this.o, L = this._layout(w, h);
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h);          // same white as the surrounding card
+    if (o.title) {
+      ctx.fillStyle = '#0A3D73'; ctx.font = `bold ${PLOT_TITLE_SIZE_PX}px ${UI_CSS}`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(o.title, L.x0, L.y0 - 10);
+    }
+    ctx.font = `${PLOT_TICK_SIZE_PX}px ${UI_CSS}`;
+    ctx.fillStyle = '#8A94A3';
+    ctx.lineWidth = 1;
+    const ys = niceStep(o.ylim[1] - o.ylim[0], 8);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    for (let v = Math.ceil(o.ylim[0] / ys) * ys; v <= o.ylim[1] + 1e-9; v += ys) {
+      const y = Math.round(this._y(v, L)) + 0.5;
+      ctx.strokeStyle = Math.abs(v) < 1e-9 ? '#C9D1DC' : '#EEF1F5';   // zero line a bit stronger
+      ctx.beginPath(); ctx.moveTo(L.x0, y); ctx.lineTo(L.x1, y); ctx.stroke();
+      ctx.fillText(String(Math.round(v * 100) / 100), L.x0 - 8, y);
+    }
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    for (let v = Math.ceil(o.xlim[0]); v <= o.xlim[1] + 1e-9; v += 1) {
+      const x = Math.round(this._x(v, L)) + 0.5;
+      ctx.strokeStyle = '#EEF1F5';
+      ctx.beginPath(); ctx.moveTo(x, L.y0); ctx.lineTo(x, L.y1); ctx.stroke();
+      ctx.fillText(String(v), x, L.y1 + 6);
+    }
+    if (o.xlabel) { ctx.fillStyle = '#6B7686'; ctx.fillText(o.xlabel, (L.x0 + L.x1) / 2, L.y1 + 24); }
+    // x axis base line only (no box frame)
+    ctx.strokeStyle = '#C9D1DC';
+    ctx.beginPath(); ctx.moveTo(L.x0, Math.round(L.y1) + 0.5); ctx.lineTo(L.x1, Math.round(L.y1) + 0.5); ctx.stroke();
+  }
+
+  _drawLegend(ctx, L) {
+    const names = this.o.legend;
+    if (!names) return;
+    ctx.font = `${PLOT_LEGEND_SIZE_PX}px ${MONO_CSS}`;
+    const lw = Math.max(...names.map(n => ctx.measureText(n).width)) + 42, lh = names.length * 17 + 8;
+    const bx = L.x0 + 8, by = L.y0 + 8;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = COLOR_SPINE; ctx.lineWidth = 1;
+    ctx.fillRect(bx, by, lw, lh); ctx.strokeRect(bx + 0.5, by + 0.5, lw - 1, lh - 1);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    names.forEach((n, i) => {
+      const y = by + 12 + i * 17;
+      ctx.strokeStyle = this.o.colors[i]; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx + 8, y); ctx.lineTo(bx + 30, y); ctx.stroke();
+      ctx.fillStyle = COLOR_TEXT; ctx.fillText(n, bx + 36, y);
+    });
+  }
+
+  _x(t, L) { const [a, b] = this.o.xlim; return L.x0 + (t - a) / (b - a) * (L.x1 - L.x0); }
+  _y(v, L) { const [a, b] = this.o.ylim; return L.y1 - (v - a) / (b - a) * (L.y1 - L.y0); }
+
+  /** buffers: array of 3 Float64Array(n) (oldest first), t: Float64Array(n) */
+  draw(t, buffers) {
+    const cv = this.canvas, dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (w === 0 || h === 0) return;
+    const key = `${w}x${h}@${dpr}`;
+    if (key !== this.sizeKey) {
+      this.sizeKey = key;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      const off = document.createElement('canvas');
+      off.width = cv.width; off.height = cv.height;
+      const octx = off.getContext('2d'); octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      this._drawStatic(octx, w, h);
+      this.bg = off;
+    }
+    const ctx = this.ctx, L = this._layout(w, h);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.bg, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(L.x0, L.y0, L.x1 - L.x0, L.y1 - L.y0); ctx.clip();
+    ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (let ch = 0; ch < buffers.length; ch++) {
+      const buf = buffers[ch];
+      ctx.strokeStyle = this.o.colors[ch];
+      ctx.beginPath();
+      let pen = false;
+      for (let i = 0; i < buf.length; i++) {
+        const v = buf[i];
+        if (!Number.isFinite(v)) { pen = false; continue; }
+        const x = this._x(t[i], L), y = this._y(v, L);
+        if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+    this._drawLegend(ctx, L);
+  }
+}
+
+</script>
+<script>
+/* ---- js/view3d.js ---- */
+/*
+ * "Sensor orientation" view: draws the Capture2Go housing (BOX_MESH) rotated by the sensor quaternion
+ * on a 2D canvas. Replaces the flat matplotlib box of the desktop app (_build_3d / _set_3d_orientation).
+ *
+ * The housing is convex, so back-face culling alone gives correct visibility; the LED and the cable slot
+ * are drawn as flat "decals" on top of the face they belong to.
+ */
+'use strict';
+
+class OrientationView {
+  constructor(canvas, title) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.title = title;
+    this.R = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    // camera like matplotlib view_init(elev=20, azim=-60); can be changed by dragging (see _initDrag)
+    this.setView(20, -60);
+    this._initDrag();
+    // make every triangle wind outwards (normal points away from the centre)
+    const V = BOX_MESH.verts;
+    this.tris = BOX_MESH.tris.map(([a, b, c, col]) => {
+      const n = OrientationView.cross(OrientationView.sub(V[b], V[a]), OrientationView.sub(V[c], V[a]));
+      const cen = [0, 1, 2].map(k => (V[a][k] + V[b][k] + V[c][k]) / 3);
+      return OrientationView.dot(n, cen) >= 0 ? [a, b, c, col] : [a, c, b, col];
+    });
+    this.dirty = true;
+  }
+
+  static DEFAULT_ELEV = 20;
+  static DEFAULT_AZIM = -60;
+
+  /** Camera direction in degrees (matplotlib convention). Only the viewpoint changes, not the sensor data. */
+  setView(elevDeg, azimDeg) {
+    this.elev = Math.max(-89, Math.min(89, elevDeg));
+    this.azim = ((azimDeg + 180) % 360 + 360) % 360 - 180;
+    const el = this.elev * Math.PI / 180, az = this.azim * Math.PI / 180;
+    this.d = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];   // towards the viewer
+    this.r = [-Math.sin(az), Math.cos(az), 0];                                          // screen right
+    this.u = OrientationView.cross(this.d, this.r);                                     // screen up
+    // light fixed relative to the camera (upper left, in front), so the box is lit from any viewpoint
+    this.light = OrientationView.norm([0, 1, 2].map(k => 0.7 * this.d[k] - 0.35 * this.r[k] + 0.6 * this.u[k]));
+    this.dirty = true;
+  }
+
+  /** Drag with mouse / finger / pen to orbit the camera around the box; double-click resets the view. */
+  _initDrag() {
+    const cv = this.canvas;
+    cv.style.touchAction = 'none';
+    cv.style.cursor = 'grab';
+    cv.title = 'Drag to turn the view · double-click to reset';
+    let last = null;
+    cv.addEventListener('pointerdown', e => {
+      last = [e.clientX, e.clientY];
+      cv.setPointerCapture(e.pointerId);
+      cv.style.cursor = 'grabbing';
+    });
+    cv.addEventListener('pointermove', e => {
+      if (!last) return;
+      const dx = e.clientX - last[0], dy = e.clientY - last[1];
+      last = [e.clientX, e.clientY];
+      this.setView(this.elev + dy * 0.5, this.azim - dx * 0.5);
+    });
+    const end = e => {
+      if (!last) return;
+      last = null;
+      try { cv.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      cv.style.cursor = 'grab';
+    };
+    cv.addEventListener('pointerup', end);
+    cv.addEventListener('pointercancel', end);
+    cv.addEventListener('dblclick', () => this.setView(OrientationView.DEFAULT_ELEV, OrientationView.DEFAULT_AZIM));
+  }
+
+  static cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+  static dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+  static sub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+  static norm(a) { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; }
+
+  /** _quat_to_matrix: q = [w, x, y, z] */
+  static quatToMatrix(q) {
+    const l = Math.hypot(q[0], q[1], q[2], q[3]);
+    const w = q[0] / l, x = q[1] / l, y = q[2] / l, z = q[3] / l;
+    return [
+      [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+      [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+      [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ];
+  }
+
+  setQuaternion(q) {
+    if (!q || !q.every(Number.isFinite)) return;
+    this.R = OrientationView.quatToMatrix(q);
+    this.dirty = true;
+  }
+
+  _rot(v) {
+    const R = this.R;
+    return [R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2],
+            R[1][0] * v[0] + R[1][1] * v[1] + R[1][2] * v[2],
+            R[2][0] * v[0] + R[2][1] * v[1] + R[2][2] * v[2]];
+  }
+
+  static shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const ch = s => Math.max(0, Math.min(255, Math.round(((n >> s) & 255) * f)));
+    return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+  }
+
+  draw() {
+    const cv = this.canvas, dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); this.dirty = true;
+    }
+    if (!this.dirty) return;
+    this.dirty = false;
+    const ctx = this.ctx;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (this.title) {
+      ctx.fillStyle = '#00569E';
+      ctx.font = `bold ${PLOT_LABEL_SIZE_PX}px ${MONO_CSS}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(this.title, w / 2, 16);
+    }
+
+    const top = this.title ? 24 : 0, size = Math.min(w, h - top);
+    const cx = w / 2, cy = top + (h - top) / 2;
+    const scale = size / 2 / 30;        // 30 mm from centre to edge of the view
+    const proj = p => [cx + scale * OrientationView.dot(p, this.r), cy - scale * OrientationView.dot(p, this.u)];
+
+    const V = BOX_MESH.verts.map(v => this._rot(v));
+    const P = V.map(proj);
+    // body: back-face culling (convex shape)
+    for (const [a, b, c, col] of this.tris) {
+      const n = OrientationView.cross(OrientationView.sub(V[b], V[a]), OrientationView.sub(V[c], V[a]));
+      if (OrientationView.dot(n, this.d) <= 0) continue;
+      const nn = OrientationView.norm(n);
+      const f = 0.55 + 0.45 * Math.max(0, OrientationView.dot(nn, this.light));
+      ctx.fillStyle = OrientationView.shade(BOX_MESH.colors[col], f);
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(P[a][0], P[a][1]); ctx.lineTo(P[b][0], P[b][1]); ctx.lineTo(P[c][0], P[c][1]);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    // decals (LED, slot) on visible faces
+    for (const dec of BOX_MESH.decals) {
+      const n = this._rot(dec.normal);
+      if (OrientationView.dot(n, this.d) <= 0.02) continue;
+      const pts = dec.pts.map(p => proj(this._rot(p)));
+      ctx.fillStyle = dec.color;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])));
+      ctx.closePath(); ctx.fill();
+    }
+    // No coordinate axes are drawn on the box: defining the sensor's coordinate system is a task for the students.
+  }
+}
+
+</script>
+<script>
+/* ---- js/app.js ---- */
+/*
+ * Capture2Go teaching app (web version).
+ * Behaviour follows the desktop program session_3.py: mode dialog -> student info -> connection dialog ->
+ * dashboard with live plots, value table, 3D orientation, recording and CSV export.
+ * Differences that a browser forces: the device is picked in the browser's own chooser, and the CSV is
+ * downloaded instead of being written to Documents/Capture2Go_Data.
+ */
+'use strict';
+
+// ── Constants (as in session_3.py) ──────────────────────────────────────────
+const TEACHER_PASSWORD_SHA256 = 'ee819c21be42106408ca5de6bfac2ed224ac0dfa2039594b267686afdfcb3edb';
+
+const COLOR_BG = '#EEF1F5', COLOR_PANEL = '#FFFFFF', COLOR_TEXT = '#3C3C3B', COLOR_MUTED = '#6B6B6A';
+const COLOR_BLUE = '#00569E', COLOR_ORANGE = '#E8822A', COLOR_GRID = '#D9DDE3', COLOR_SPINE = '#B8BEC8';
+const CHANNEL_COLORS = [COLOR_BLUE, COLOR_ORANGE, COLOR_TEXT];          // X, Y, Z
+// Line colours per signal, by axis (X blue, Y orange, Z dark grey). Euler angles are shown in the order
+// Roll (about y''), Pitch (about x'), Yaw (about z), so their colours are Y, X, Z.
+const SIGNAL_COLORS = [CHANNEL_COLORS, CHANNEL_COLORS, CHANNEL_COLORS, [COLOR_ORANGE, COLOR_BLUE, COLOR_TEXT]];
+const CHANNEL_NAMES = ['Channel 1', 'Channel 2', 'Channel 3'];
+const SIGNAL_NAMES = ['Signal A', 'Signal B', 'Signal C', 'Signal D'];
+const CSV_COLUMNS = ['time_s', 'signal_1', 'signal_2', 'signal_3', 'signal_4', 'signal_5', 'signal_6'];
+const TEACHER_PLOT_TITLES = ['Gyroscope [°/s]', 'Accelerometer [m/s²]', 'Magnetometer [µT]', 'Euler orientation [°]'];
+const TEACHER_CHANNEL_NAMES = [['X', 'Y', 'Z'], ['X', 'Y', 'Z'], ['X', 'Y', 'Z'], ["Roll (y'')", "Pitch (x')", 'Yaw (z)']];
+const TEACHER_FIELDS = [
+  ['── Gyroscope [°/s] ──', null], ['  Gyr X', 'gyr_x'], ['  Gyr Y', 'gyr_y'], ['  Gyr Z', 'gyr_z'],
+  ['── Accelerometer [m/s²] ──', null], ['  Acc X', 'acc_x'], ['  Acc Y', 'acc_y'], ['  Acc Z', 'acc_z'],
+  ['── Magnetometer [µT] ──', null], ['  Mag X', 'mag_x'], ['  Mag Y', 'mag_y'], ['  Mag Z', 'mag_z'],
+  ['── Euler orientation [°] ──', null], ["  Roll  (y'')", 'euler_y'], ["  Pitch (x')", 'euler_x'], ['  Yaw   (z)', 'euler_z'],
+  ['── Status ──', null], ['  Packets received', 'pkt_count'],
+];
+const TEACHER_KEY_MAP = {
+  gyr_x: [0, 0], gyr_y: [0, 1], gyr_z: [0, 2], acc_x: [1, 0], acc_y: [1, 1], acc_z: [1, 2],
+  mag_x: [2, 0], mag_y: [2, 1], mag_z: [2, 2], euler_y: [3, 0], euler_x: [3, 1], euler_z: [3, 2],
+};
+const BTN_START_TEXT = '▶  Start data recording';
+const BTN_RECORDING_TEXT = '⏺  Recording data…';
+const POLL_INTERVAL_MS = 20;
+const PLOT_INTERVAL_MS = 40;
+const IS_LINUX = /Linux/i.test(navigator.userAgent) && !/Android|CrOS/i.test(navigator.userAgent);
+
+function buildStudentFields() {
+  const fields = [], keyMap = {};
+  SIGNAL_NAMES.forEach((sig, i) => {
+    fields.push([`── ${sig} ──`, null]);
+    CHANNEL_NAMES.forEach((ch, c) => { const key = `sig${i}_ch${c}`; fields.push([` ${ch}`, key]); keyMap[key] = [i, c]; });
+  });
+  fields.push(['── Status ──', null]);
+  fields.push(['  Packets received', 'pkt_count']);
+  return [fields, keyMap];
+}
+
+function normalizeDeviceName(raw) {
+  const name = raw.trim().replace(/ /g, '');
+  if (name.toLowerCase() === 'usb') return 'usb';
+  const low = name.toLowerCase();
+  if (low.startsWith('imu_')) return 'IMU_' + low.slice(4);
+  if (low.startsWith('imu')) return 'IMU_' + low.slice(3);
+  if (low.length >= 3 && low.length <= 8 && /^[0-9a-f]+$/.test(low)) return 'IMU_' + low;
+  return name;
+}
+
+async function checkTeacherPassword(pw) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pw));
+  const hex = Array.from(new Uint8Array(buf), b => b.toString(16).padStart(2, '0')).join('');
+  return hex === TEACHER_PASSWORD_SHA256;
+}
+
+// ── Small DOM helpers ───────────────────────────────────────────────────────
+const $ = (sel, root = document) => root.querySelector(sel);
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v !== null && v !== undefined) e.setAttribute(k, v === true ? '' : v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined) e.append(c);
+  return e;
+}
+
+/** Modal dialog with a blue title bar (like the Tk dialogs). Returns {root, close}. */
+function openDialog(title, body, buttons) {
+  const overlay = el('div', { class: 'overlay' });
+  const box = el('div', { class: 'dialog', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    el('div', { class: 'dialog-title' }, title), el('div', { class: 'dialog-body' }, body),
+    el('div', { class: 'dialog-buttons' }, buttons));
+  overlay.append(box);
+  document.body.append(overlay);
+  const first = box.querySelector('input:not([type=radio]), button.primary');
+  if (first) setTimeout(() => first.focus(), 0);
+  return { root: box, close: () => overlay.remove() };
+}
+
+/** Message box (showwarning / showerror / showinfo / askyesno). Resolves with the pressed button's value. */
+function messageBox(title, text, kind = 'info', buttons = [['OK', true]]) {
+  return new Promise(resolve => {
+    let dlg;
+    const btns = buttons.map(([label, value], i) =>
+      el('button', { class: i === buttons.length - 1 ? 'primary' : 'secondary', onclick: () => { dlg.close(); resolve(value); } }, label));
+    const icon = { warning: '⚠', error: '❌', info: 'ℹ', question: '?' }[kind] || '';
+    dlg = openDialog(title, el('div', { class: `msg msg-${kind}` }, el('span', { class: 'msg-icon' }, icon), el('pre', { class: 'msg-text' }, text)), btns);
+    dlg.root.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); btns[btns.length - 1].click(); } });
+  });
+}
+
+// ── Dialog 1: interface / mode ──────────────────────────────────────────────
+function modeDialog() {
+  return new Promise(resolve => {
+    const pwInput = el('input', { type: 'password', class: 'entry', autocomplete: 'off' });
+    const pwRow = el('div', { class: 'field hidden' }, el('label', {}, 'Password:'), pwInput);
+    const radio = (text, value, checked) => el('label', { class: 'radio' },
+      el('input', { type: 'radio', name: 'mode', value, checked, onchange: onChange }), el('span', {}, text));
+    function onChange() {
+      const teacher = $('input[name=mode]:checked', dlg.root).value === 'teacher';
+      pwRow.classList.toggle('hidden', !teacher);
+      if (teacher) pwInput.focus();
+    }
+    async function confirm() {
+      if ($('input[name=mode]:checked', dlg.root).value === 'teacher') {
+        if (!(await checkTeacherPassword(pwInput.value))) {
+          await messageBox('Wrong password', 'The password is not correct.', 'warning');
+          pwInput.value = ''; pwInput.focus();
+          return;
+        }
+        dlg.close(); resolve('teacher');
+      } else { dlg.close(); resolve('student'); }
+    }
+    const body = el('div', {},
+      el('div', { class: 'label-bold' }, 'Version:'),
+      el('div', { class: 'radios' }, radio('Student', 'student', true), radio('Teacher', 'teacher', false)),
+      pwRow);
+    const dlg = openDialog('Capture2Go  ·  Interface', body, [
+      el('button', { class: 'secondary', onclick: () => { dlg.close(); resolve(null); } }, 'Cancel'),
+      el('button', { class: 'primary', onclick: confirm }, '  Continue  ')]);
+    dlg.root.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); confirm(); } });
+  });
+}
+
+// ── Dialog 2: student info ──────────────────────────────────────────────────
+function studentInfoDialog() {
+  return new Promise(resolve => {
+    const nameIn = el('input', { type: 'text', class: 'entry', autocomplete: 'name' });
+    const idIn = el('input', { type: 'text', class: 'entry', autocomplete: 'off' });
+    async function confirm() {
+      const name = nameIn.value.trim(), sid = idIn.value.trim();
+      if (!name) { await messageBox('Missing name', 'Please enter your full name.', 'warning'); nameIn.focus(); return; }
+      if (!sid) { await messageBox('Missing student ID', 'Please enter your Matrikel-Nr. / student ID.', 'warning'); idIn.focus(); return; }
+      dlg.close(); resolve({ name, id: sid });
+    }
+    const body = el('div', {},
+      el('div', { class: 'field' }, el('label', { class: 'label-bold' }, 'Full name:'), nameIn),
+      el('div', { class: 'field' }, el('label', { class: 'label-bold' }, 'Matrikel-Nr. / Student ID:'), idIn));
+    const dlg = openDialog('Capture2Go  ·  Student Info', body, [
+      el('button', { class: 'secondary', onclick: () => { dlg.close(); resolve(null); } }, 'Cancel'),
+      el('button', { class: 'primary', onclick: confirm }, '  Continue  ')]);
+    dlg.root.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); confirm(); } });
+    setTimeout(() => nameIn.focus(), 0);
+  });
+}
+
+// ── Dialog 3: connection (USB / BLE) ────────────────────────────────────────
+/** Resolves {deviceName, chosen} or null. The browser's device chooser opens from the Connect click. */
+function connectionDialog() {
+  return new Promise(resolve => {
+    const hasSerial = 'serial' in navigator, hasBle = 'bluetooth' in navigator;
+    const bleIn = el('input', { type: 'text', class: 'entry', autocomplete: 'off', spellcheck: 'false' });
+    const bleRow = el('div', { class: 'field hidden' }, el('label', {}, 'Device name (e.g. IMU_ab1234):'), bleIn);
+    const radio = (text, value, checked, enabled) => el('label', { class: 'radio' + (enabled ? '' : ' disabled') },
+      el('input', { type: 'radio', name: 'conn', value, checked, disabled: !enabled, onchange: onChange }), el('span', {}, text));
+    const defaultConn = hasSerial ? 'usb' : 'ble';
+    function conn() { return $('input[name=conn]:checked', dlg.root).value; }
+    function onChange() { bleRow.classList.toggle('hidden', conn() !== 'ble'); if (conn() === 'ble') bleIn.focus(); }
+    const note = [];
+    if (!hasSerial) note.push('USB is not available in this browser.');
+    if (!hasBle) note.push('Bluetooth is not available in this browser.');
+    const linuxNote = IS_LINUX ? el('div', { class: 'note' },
+      el('div', { class: 'note-title' }, '⚠  Linux users – sensor not found?'),
+      el('pre', { class: 'note-text' }, 'Run this once in a terminal, then reboot:\n   sudo usermod -aG dialout $USER')) : null;
+
+    function connect() {          // NOT async: the chooser must open within the click
+      let deviceName, request;
+      if (conn() === 'usb') {
+        deviceName = 'usb';
+        request = UsbDevice.request();
+      } else {
+        const raw = bleIn.value.trim();
+        if (!raw) { messageBox('Missing device name', 'Please enter the BLE device name (e.g. IMU_ab1234).', 'warning'); return; }
+        deviceName = normalizeDeviceName(raw);
+        request = BleDevice.request(deviceName);
+      }
+      request.then(chosen => { dlg.close(); resolve({ deviceName, chosen }); })
+        .catch(err => {
+          const cancelled = err && (err.name === 'NotFoundError' || err.name === 'AbortError');
+          messageBox('No sensor selected', cancelled
+            ? (deviceName === 'usb'
+              ? 'No USB port was selected.\n\nPlug in the sensor with a data cable, press Connect and pick the sensor in the browser list.'
+              : `No sensor was selected.\n\nThe browser list only shows a sensor called '${deviceName}'. If the list stays empty: check the name, switch the sensor on, keep it close to the computer, and make sure no other program or phone is connected to it.`)
+            : `Could not open the device:\n${err}`, 'warning');
+        });
+    }
+    const body = el('div', {},
+      el('div', { class: 'label-bold' }, 'Connection type:'),
+      el('div', { class: 'radios' }, radio('USB  (plug-in cable)', 'usb', defaultConn === 'usb', hasSerial),
+        radio('Bluetooth (BLE)', 'ble', defaultConn === 'ble', hasBle)),
+      bleRow,
+      note.length ? el('div', { class: 'small-muted' }, note.join(' ')) : null,
+      linuxNote);
+    const dlg = openDialog('Capture2Go  ·  Connect', body, [
+      el('button', { class: 'secondary', onclick: () => { dlg.close(); resolve(null); } }, 'Cancel'),
+      el('button', { class: 'primary', onclick: connect }, '  Connect  ')]);
+    dlg.root.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); connect(); } });
+    onChange();
+  });
+}
+
+// ── Export ──────────────────────────────────────────────────────────────────
+function pyFmt4(v) {                         // Python: f'{round(v, 4):.4f}' (keeps the sign of -0.0)
+  const r = Number(v.toFixed(4));
+  let s = r.toFixed(4);
+  if (r === 0 && (v < 0 || Object.is(v, -0)) && s[0] !== '-') s = '-' + s;
+  return s;
+}
+
+function timestampStr(d = new Date()) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+function safePart(s) { return Array.from(s, c => (/[\p{L}\p{N}_-]/u.test(c) ? c : '_')).join(''); }
+
+/** export_data(): same CSV as the desktop app, delivered as a download. Returns the file name. */
+function exportData(studentName, studentId, records) {
+  const fileName = `${safePart(studentName.replace(/ /g, '_'))}_${safePart(studentId)}_${timestampStr()}_data.csv`;
+  const lines = [CSV_COLUMNS.join(',')];
+  for (const row of records) lines.push(row.map(pyFmt4).join(','));
+  const blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: fileName });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return fileName;
+}
+
+// ── Dashboard ───────────────────────────────────────────────────────────────
+class SensorDashboard {
+  static N_SAMPLES = 800;
+  static SAMPLE_RATE = 200.0;
+
+  constructor(conn, studentName, studentId, teacherMode) {
+    this.deviceName = conn.deviceName;
+    this.chosen = conn.chosen;
+    this.studentName = studentName;
+    this.studentId = studentId;
+    this.teacherMode = teacherMode;
+    const N = SensorDashboard.N_SAMPLES;
+    this._t = Float64Array.from({ length: N }, (_, i) => (i - N) / SensorDashboard.SAMPLE_RATE);
+    this._resetBuffers();
+    this._pktCount = 0;
+    this._records = [];
+    this._tElapsed = 0.0;
+    this._recording = false;
+    this._exported = false;
+    this._lastQuat = null;
+    this._queue = [];
+    this._session = null;
+    this._closing = false;
+
+    this._buildUi();
+    this._setTitle();
+    this._startStream();
+    this._pollTimer = setInterval(() => this._pollQueue(), POLL_INTERVAL_MS);
+    this._plotTimer = setInterval(() => this._updatePlot(), PLOT_INTERVAL_MS);
+    this._3dTimer = setInterval(() => this._update3d(), 40);
+    window.addEventListener('beforeunload', e => {
+      if (this._records.length && !this._exported) { e.preventDefault(); e.returnValue = ''; }
+    });
+    // tab closed / reloaded: try to leave the sensor idle and free for the next session
+    window.addEventListener('pagehide', () => { if (this._session) this._session.abandon(); });
+  }
+
+  _resetBuffers() {
+    const N = SensorDashboard.N_SAMPLES;
+    this._buffers = SIGNAL_NAMES.map(() => [0, 1, 2].map(() => new Float64Array(N).fill(NaN)));
+  }
+
+  _setTitle() { document.title = `Capture2Go  ·  ${this.deviceName}  ·  ${this.studentName}`; }
+
+  _buildUi() {
+    const root = $('#app');
+    root.innerHTML = '';
+    let header = 'Capture2Go  ·  Sensor Dashboard';
+    if (this.teacherMode) header += '  ·  Teacher';
+    const bannerText = this.teacherMode ? '🎓  Teacher mode' : `🎓  ${this.studentName}  ·  ID: ${this.studentId}`;
+    this._recLabel = el('span', { class: 'chip rec-label' }, '⏸  Not recording – press the start button');
+
+    // value table (the "──" decoration of the desktop labels is shown as styled section headers instead)
+    const [fields, keyMap] = this.teacherMode ? [TEACHER_FIELDS, TEACHER_KEY_MAP] : buildStudentFields();
+    const clean = s => s.replace(/─/g, '').trim();
+    this._valueEls = SIGNAL_NAMES.map(() => [null, null, null]);
+    const table = el('div', { class: 'value-table' });
+    for (const [label, key] of fields) {
+      if (key === null) { table.append(el('div', { class: 'vt-section' }, clean(label))); continue; }
+      const val = el('span', { class: 'vt-value' }, '—');
+      if (key === 'pkt_count') {
+        this._pktEl = val;
+        table.append(el('div', { class: 'vt-row' }, el('span', { class: 'vt-swatch' }), el('span', { class: 'vt-label' }, clean(label)), val));
+      } else {
+        const [sig, ch] = keyMap[key];
+        this._valueEls[sig][ch] = val;
+        table.append(el('div', { class: 'vt-row' }, el('span', { class: 'vt-swatch', style: `background:${SIGNAL_COLORS[sig][ch]}` }),
+          el('span', { class: 'vt-label' }, clean(label)), val));
+      }
+    }
+    this._statusEl = el('div', { class: 'status' }, '🔄  Connecting…');
+    this._startBtn = el('button', { class: 'btn btn-green', onclick: () => this._startRecording() }, BTN_START_TEXT);
+    const reconnectBtn = el('button', { class: 'btn btn-plain', onclick: () => this._reconnect() }, '🔌  Reconnect');
+    const stopBtn = el('button', { class: 'btn btn-orange', onclick: () => this._onClose() }, '⏹  Stop & Export data');
+    const cv3d = el('canvas', { class: 'view3d', 'aria-label': 'Sensor orientation (3D view)' });
+
+    const titles = this.teacherMode ? TEACHER_PLOT_TITLES : SIGNAL_NAMES;
+    const legends = [0, 1, 2, 3].map(i => (this.teacherMode ? TEACHER_CHANNEL_NAMES[i] : (i === 0 ? CHANNEL_NAMES : null)));
+    const plotCanvases = [0, 1, 2, 3].map(i => el('canvas', { class: 'plot', 'aria-label': titles[i] }));
+    const plotCards = plotCanvases.map((cv, i) => el('div', { class: 'card plot-card' },
+      el('div', { class: 'plot-head' }, el('span', { class: 'plot-title' }, titles[i]),
+        legends[i] ? el('span', { class: 'legend' }, legends[i].map((n, c) =>
+          el('span', { class: 'legend-item' }, el('i', { style: `background:${SIGNAL_COLORS[i][c]}` }), n))) : null),
+      cv));
+    root.append(
+      el('header', { class: 'app-header' }, header),
+      el('div', { class: 'banner' }, el('span', { class: 'chip banner-name' }, bannerText), this._recLabel),
+      el('main', { class: 'main' },
+        el('aside', { class: 'card values' }, el('div', { class: 'card-title' }, '📡  Real-time data'), table),
+        el('section', { class: 'plots' }, plotCards),
+        el('div', { class: 'side' },
+          el('div', { class: 'card' },
+            el('div', { class: 'controls' }, this._statusEl, this._startBtn, reconnectBtn, stopBtn)),
+          el('div', { class: 'card view-card' }, el('div', { class: 'card-title' }, 'Sensor orientation'), cv3d,
+            el('div', { class: 'view3d-hint' }, 'Drag to turn the view · double-click to reset')))));
+
+    const ylims = [[-800, 800], [-20, 20], [-100, 100], [-180, 180]];
+    this._plots = plotCanvases.map((cv, i) => new LinePlot(cv, {
+      title: null, ylim: ylims[i], xlim: [this._t[0], this._t[this._t.length - 1]], colors: SIGNAL_COLORS[i],
+      legend: null, xlabel: this.teacherMode ? 'Time [s]' : null,
+    }));
+    this._view3d = new OrientationView(cv3d, '');
+  }
+
+  _startRecording() {
+    if (this._recording) return;
+    this._records = [];
+    this._tElapsed = 0.0;
+    this._recording = true;
+    this._startBtn.textContent = BTN_RECORDING_TEXT;
+    this._startBtn.disabled = true;
+    this._startBtn.classList.add('btn-muted');
+    this._recLabel.textContent = '⏺  Recording: 0 samples';
+    this._recLabel.classList.add('recording');
+  }
+
+  _startStream() {
+    this._session = new StreamSession(this.deviceName, this.chosen, item => this._queue.push(item));
+  }
+
+  async _stopStream(timeoutS = 6.0) {
+    if (this._session) await this._session.stop(timeoutS);
+  }
+
+  async _reconnect() {
+    this._statusEl.textContent = '⏳  Closing previous connection…';
+    await this._stopStream();
+    this._queue = [];
+    this._pktCount = 0;
+    this._resetBuffers();
+    this._statusEl.textContent = '🔄  Connecting…';
+    const res = await connectionDialog();
+    if (res) {
+      this.deviceName = res.deviceName;
+      this.chosen = res.chosen;
+      this._setTitle();
+      this._startStream();
+    } else {
+      this._session = null;
+      this._statusEl.textContent = '⏸  Not connected';
+    }
+  }
+
+  _pollQueue() {
+    while (this._queue.length) {
+      const item = this._queue.shift();
+      if (item.kind === 'status') this._statusEl.textContent = item.text;
+      else if (item.kind === 'error') {
+        this._statusEl.textContent = `❌  ${item.error.message || item.error}`;
+        this._showError(item.error);
+        break;
+      } else if (item.type === 'DataFullPacked') this._handlePacket(item);
+    }
+  }
+
+  _handlePacket(p) {
+    const deg = 180 / Math.PI, n = p.gyr.length;
+    const batches = [
+      p.gyr.map(r => r.map(v => v * deg)),
+      p.acc,
+      p.mag,
+      // intrinsic z-x'-y'' angles [about z, about x', about y''], shown as [Roll (y''), Pitch (x'), Yaw (z)]
+      p.quat9D.map(q => { const e = C2G.eulerAngles(q, 'zxy', true); return [e[2] * deg, e[1] * deg, e[0] * deg]; }),
+    ];
+    this._lastQuat = p.quat9D[n - 1];
+    batches.forEach((batch, idx) => {
+      for (let ch = 0; ch < 3; ch++) {
+        const buf = this._buffers[idx][ch];
+        buf.copyWithin(0, n);
+        for (let i = 0; i < n; i++) buf[buf.length - n + i] = batch[i][ch];
+        const v = batch[n - 1][ch];
+        this._valueEls[idx][ch].textContent = ((v >= 0 ? '+' : '') + v.toFixed(2)).padStart(8, ' ');
+      }
+    });
+    if (this._recording) {
+      const acc = batches[1], gyr = batches[0], dt = 1.0 / SensorDashboard.SAMPLE_RATE;
+      for (let i = 0; i < n; i++) {
+        this._records.push([Number(this._tElapsed.toFixed(5)), acc[i][0], acc[i][1], acc[i][2], gyr[i][0], gyr[i][1], gyr[i][2]]);
+        this._tElapsed += dt;
+      }
+      this._recLabel.textContent = `⏺  Recording: ${this._records.length} samples`;
+    }
+    this._pktCount += 1;
+    this._pktEl.textContent = String(this._pktCount);
+    this._statusEl.textContent = '🟢  Streaming active';
+  }
+
+  _showError(exc) {
+    const s = String(exc && exc.message || exc).toLowerCase();
+    const isUsb = this.deviceName === 'usb';
+    let hint;
+    if (IS_LINUX && (s.includes('dialout') || s.includes('permission') || s.includes('access') || s.includes('serial'))) {
+      hint = '\n\nLinux fix – run this in a terminal and reboot:\n   sudo usermod -aG dialout $USER';
+    } else if (isUsb) {
+      hint = '\n\nCheck that the sensor is plugged in with a data cable and switched on, then press Reconnect.';
+    } else {
+      hint = '\n\nBluetooth checklist:\n • Sensor is switched on and close to the computer\n • Name is correct (e.g. IMU_3dbe7)\n' +
+        ' • Sensor is NOT connected to another program, phone or computer\n • Bluetooth is enabled on this computer\n' +
+        ' • If it still fails: switch the sensor off and on, then press Reconnect';
+    }
+    messageBox('Connection error', `Could not connect to '${this.deviceName}':\n${exc && exc.message || exc}${hint}`, 'error');
+  }
+
+  _updatePlot() {
+    this._plots.forEach((pl, i) => pl.draw(this._t, this._buffers[i]));
+  }
+
+  _update3d() {
+    const q = this._lastQuat;
+    if (q && q.every(Number.isFinite)) this._view3d.setQuaternion(q);
+    this._view3d.draw();
+  }
+
+  async _onClose() {
+    if (this._closing) return;
+    this._closing = true;
+    this._statusEl.textContent = '⏳  Closing connection…';
+    await this._stopStream(6.0);
+    if (this._records.length) {
+      try {
+        const fileName = exportData(this.studentName, this.studentId, this._records);
+        this._exported = true;
+        await messageBox('Data exported',
+          `✅  Session data saved successfully!\n\n📁  Folder:\nyour browser's Downloads folder\n\n📄  File:  ${fileName}\n📊  Samples: ${this._records.length}`,
+          'info');
+      } catch (exc) {
+        await messageBox('Export error', `Could not save data:\n${exc}`, 'error');
+      }
+    } else {
+      const msg = this._recording
+        ? 'Recording was started but no sensor data were received.\nNothing was exported.'
+        : `Data recording was never started (button '${BTN_START_TEXT.trim()}').\nNothing was exported.`;
+      await messageBox('No data recorded', msg, 'info');
+    }
+    this._destroy();
+  }
+
+  _destroy() {
+    clearInterval(this._pollTimer); clearInterval(this._plotTimer); clearInterval(this._3dTimer);
+    showFinished();
+  }
+}
+
+function showFinished() {
+  const root = $('#app');
+  root.innerHTML = '';
+  root.append(el('div', { class: 'card finished' },
+    el('h1', {}, 'Session finished'),
+    el('p', {}, 'The connection to the sensor is closed. You can close this tab now.'),
+    el('button', { class: 'btn btn-orange', onclick: () => location.reload() }, 'Start a new session')));
+}
+
+function showUnsupported() {
+  $('#app').innerHTML = '';
+  $('#app').append(el('div', { class: 'card finished' },
+    el('h1', {}, 'Please open this page in Chrome or Edge'),
+    el('p', {}, 'This browser cannot connect to the sensor. Web pages can only talk to USB and Bluetooth devices in Google Chrome or Microsoft Edge on a computer (Windows, macOS, Linux, ChromeOS).'),
+    el('p', { class: 'small-muted' }, 'Firefox, Safari, and all browsers on iPhone/iPad are not supported.')));
+}
+
+// ── Entry point ─────────────────────────────────────────────────────────────
+async function main() {
+  if (!('serial' in navigator) && !('bluetooth' in navigator)) { showUnsupported(); return; }
+  const mode = await modeDialog();
+  if (mode === null) { showFinished(); return; }
+  const teacherMode = mode === 'teacher';
+  let studentName, studentId;
+  if (teacherMode) { studentName = 'Teacher'; studentId = 'teacher'; }
+  else {
+    const info = await studentInfoDialog();
+    if (!info) { showFinished(); return; }
+    studentName = info.name; studentId = info.id;
+  }
+  const conn = await connectionDialog();
+  if (!conn) { showFinished(); return; }
+  window.dashboard = new SensorDashboard(conn, studentName, studentId, teacherMode);
+}
+
+if (!window.C2G_NO_AUTOSTART) window.addEventListener('DOMContentLoaded', main);   // test pages set this flag
+
+</script>
+</body>
+</html>
